@@ -1,0 +1,194 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "add": "Add",
+    "edit": "Edit",
+    "delete": "Delete",
+    "close": "Close",
+    "copy": "Copy",
+    "done": "Done"
+  },
+  "search": {
+    "placeholder": "Search content and window title..."
+  },
+  "tabs": {
+    "all": "All",
+    "favorites": "Favorites"
+  },
+  "filters": {
+    "button": "Filters",
+    "heading": "Filter by",
+    "type": "Type",
+    "all_types": "All types",
+    "app": "App",
+    "all_apps": "All apps",
+    "category": "Category",
+    "all_categories": "All categories",
+    "window": "Window",
+    "all_windows": "All windows",
+    "clear_all": "Clear all filters"
+  },
+  "list": {
+    "loading": "Loading…",
+    "loading_more": "Loading more…",
+    "no_results": "No results for that search",
+    "empty": "Nothing copied yet",
+    "empty_hint": "Copy something and it'll appear here"
+  },
+  "entry": {
+    "copy": "Copy",
+    "add_favorite": "Add to favorites",
+    "remove_favorite": "Remove from favorites",
+    "delete": "Delete"
+  },
+  "detail": {
+    "copy": "Copy",
+    "copy_title": "Copy to clipboard",
+    "close": "Close",
+    "copied": "Copied",
+    "copy_selection": "Copy selection",
+    "collections": "Collections",
+    "when": "When",
+    "app": "App",
+    "window": "Window",
+    "category": "Category",
+    "status": "Status",
+    "favorite": "Favorite"
+  },
+  "collection_selector": {
+    "add": "Add to collection",
+    "edit": "Edit",
+    "done": "Done"
+  },
+  "content_renderer": {
+    "open_browser": "Open in browser",
+    "non_http": "Non-http URL — cannot be opened",
+    "open_email": "Open email client"
+  },
+  "typeahead": {
+    "search": "Search...",
+    "no_results": "No results"
+  },
+  "builtin": {
+    "tooltip": "Built-in — cannot be deleted"
+  },
+  "time": {
+    "just_now": "just now",
+    "minutes_ago": "{{count}}m ago",
+    "hours_ago": "{{count}}h ago",
+    "days_ago": "{{count}}d ago"
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "appearance": "Appearance",
+      "content_types": "Content Types",
+      "categories": "Categories",
+      "collections": "Collections",
+      "behavior": "Behavior",
+      "about": "About"
+    },
+    "appearance": {
+      "theme_title": "Theme",
+      "theme_desc": "Choose a color palette for the interface",
+      "language_title": "Language",
+      "language_desc": "Select the interface language"
+    },
+    "content_types": {
+      "section_title": "Content Types & Rules",
+      "section_desc": "Define types and the regex patterns used to detect them. Min hits = how many patterns must match."
+    },
+    "categories": {
+      "section_title": "Categories & Rules",
+      "section_desc": "Assign entries to categories based on source app and/or window title regex patterns."
+    },
+    "collections_section": {
+      "section_title": "Collections",
+      "section_desc": "Organize entries into named groups. Entries in a collection are never auto-deleted."
+    },
+    "behavior": {
+      "section_title": "Behavior",
+      "section_desc": "Control how the app loads and retains clipboard entries",
+      "page_size_label": "Entries per page",
+      "page_size_desc": "How many entries load at a time when scrolling.",
+      "max_history_label": "Max history entries",
+      "max_history_desc": "Keep only the latest N entries. Favorites are never deleted. <code>0</code> = unlimited.",
+      "retention_label": "Delete after (days)",
+      "retention_desc": "Remove entries older than N days. Favorites are never deleted. <code>0</code> = never.",
+      "dedup_label": "Dedup interval (minutes)",
+      "dedup_desc": "How often to remove duplicate entries, keeping only the latest copy. <code>0</code> = disabled.",
+      "max_bytes_label": "Max bytes to analyze",
+      "max_bytes_desc": "Content longer than this is truncated before pattern matching. <code>0</code> = no limit."
+    }
+  },
+  "collections_mgr": {
+    "no_collections": "No collections yet",
+    "entries_count_one": "{{count}} entry",
+    "entries_count_other": "{{count}} entries",
+    "new_collection": "New collection",
+    "name_placeholder": "Name…"
+  },
+  "categories_mgr": {
+    "rules_count_one": "{{count}} rule",
+    "rules_count_other": "{{count}} rules",
+    "collapse": "Collapse",
+    "expand_rules": "Expand rules",
+    "delete_category": "Delete category",
+    "color": "color",
+    "context_rules_title": "Context rules — matched by source app and/or window title (regex)",
+    "no_rules": "No rules defined",
+    "app": "app",
+    "title_label": "title",
+    "add_rule": "Add rule",
+    "app_pattern_placeholder": "Regex for source app…",
+    "title_pattern_placeholder": "Regex for window title…",
+    "priority": "priority",
+    "disable_rule": "Disable rule",
+    "enable_rule": "Enable rule",
+    "delete_rule": "Delete rule",
+    "new_category": "New category",
+    "name_placeholder": "Name…"
+  },
+  "content_types_mgr": {
+    "rules_count_one": "{{count}} rule",
+    "rules_count_other": "{{count}} rules",
+    "collapse": "Collapse",
+    "expand_rules": "Expand rules",
+    "delete_type": "Delete type",
+    "color": "color",
+    "no_rules": "No rules defined",
+    "min_hits": "min_hits: {{n}}",
+    "priority_display": "p: {{n}}",
+    "add_rule": "Add rule",
+    "pattern_placeholder": "Regex pattern…",
+    "min_hits_label": "min_hits",
+    "priority_label": "priority",
+    "disable_rule": "Disable rule",
+    "enable_rule": "Enable rule",
+    "delete_rule": "Delete rule",
+    "new_type": "New content type",
+    "name_placeholder": "name (e.g. json)",
+    "label_placeholder": "label (e.g. JSON)"
+  },
+  "app": {
+    "footer_hint": "Click to preview · Hover for actions",
+    "version": "clipboard-tool v1.0",
+    "delete_error_fallback": "Could not delete entry.",
+    "delete_error_in_collection": "Entry belongs to collection(s): {{names}}. Remove it from all collections before deleting."
+  },
+  "about": {
+    "description": "Local-only clipboard manager. No cloud sync, no telemetry.",
+    "version_label": "Version",
+    "license_label": "License",
+    "author_label": "Author",
+    "source_label": "Source code",
+    "frontend_title": "Frontend",
+    "backend_title": "Backend (Rust)",
+    "mit": "MIT",
+    "apache2": "Apache 2.0",
+    "mit_apache": "MIT / Apache 2.0",
+    "bsd3": "BSD-3-Clause",
+    "public_domain": "Public Domain"
+  }
+}

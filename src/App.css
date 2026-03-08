@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+html, body, #root {
+  background: transparent;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+@theme {
+  /* ── Surfaces ─────────────────────────────────────────── */
+  --color-base:           #0a0a0a;
+  --color-surface:        #141414;
+  --color-surface-raised: #1c1c1c;
+  --color-surface-active: #242424;
+
+  /* ── Strokes ──────────────────────────────────────────── */
+  --color-stroke:         #2a2a2a;
+  --color-stroke-strong:  #333333;
+
+  /* ── Content (text) ───────────────────────────────────── */
+  --color-content:        #f0f0f0;
+  --color-content-2:      #8a8a8a;
+  --color-content-3:      #4a4a4a;
+
+  /* ── Accent ───────────────────────────────────────────── */
+  --color-accent:         #3b82f6;
+  --color-accent-hover:   #2563eb;
+  --color-accent-text:    #93c5fd;
+
+  /* ── Semantic ─────────────────────────────────────────── */
+  --color-danger:         #ef4444;
+  --color-warn:           #f59e0b;
+  --color-ok:             #22c55e;
+
+  /* ── Shadows ──────────────────────────────────────────── */
+  --shadow-dropdown: 0 4px 16px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.4);
+  --shadow-panel:    0 8px 32px rgba(0,0,0,0.65);
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+/* ── Global: smooth transitions on all interactive elements ── */
+button, input, select, textarea, a {
+  transition-property: background-color, border-color, color, opacity, box-shadow;
+  transition-duration: 80ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── Global: focus ring ───────────────────────────────────── */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}

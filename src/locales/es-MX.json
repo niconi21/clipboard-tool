@@ -1,0 +1,194 @@
+{
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "add": "Agregar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "close": "Cerrar",
+    "copy": "Copiar",
+    "done": "Listo"
+  },
+  "search": {
+    "placeholder": "Buscar en contenido y título de ventana..."
+  },
+  "tabs": {
+    "all": "Todo",
+    "favorites": "Favoritos"
+  },
+  "filters": {
+    "button": "Filtros",
+    "heading": "Filtrar por",
+    "type": "Tipo",
+    "all_types": "Todos los tipos",
+    "app": "App",
+    "all_apps": "Todas las apps",
+    "category": "Categoría",
+    "all_categories": "Todas las categorías",
+    "window": "Ventana",
+    "all_windows": "Todas las ventanas",
+    "clear_all": "Limpiar filtros"
+  },
+  "list": {
+    "loading": "Cargando…",
+    "loading_more": "Cargando más…",
+    "no_results": "Sin resultados para esa búsqueda",
+    "empty": "Nada copiado aún",
+    "empty_hint": "Copia algo y aparecerá aquí"
+  },
+  "entry": {
+    "copy": "Copiar",
+    "add_favorite": "Agregar a favoritos",
+    "remove_favorite": "Quitar de favoritos",
+    "delete": "Eliminar"
+  },
+  "detail": {
+    "copy": "Copiar",
+    "copy_title": "Copiar al portapapeles",
+    "close": "Cerrar",
+    "copied": "Copiado",
+    "copy_selection": "Copiar selección",
+    "collections": "Colecciones",
+    "when": "Cuándo",
+    "app": "App",
+    "window": "Ventana",
+    "category": "Categoría",
+    "status": "Estado",
+    "favorite": "Favorito"
+  },
+  "collection_selector": {
+    "add": "Agregar a colección",
+    "edit": "Editar",
+    "done": "Listo"
+  },
+  "content_renderer": {
+    "open_browser": "Abrir en navegador",
+    "non_http": "URL no-http — no se puede abrir",
+    "open_email": "Abrir cliente de correo"
+  },
+  "typeahead": {
+    "search": "Buscar...",
+    "no_results": "Sin resultados"
+  },
+  "builtin": {
+    "tooltip": "Integrado — no se puede eliminar"
+  },
+  "time": {
+    "just_now": "ahora mismo",
+    "minutes_ago": "hace {{count}}m",
+    "hours_ago": "hace {{count}}h",
+    "days_ago": "hace {{count}}d"
+  },
+  "settings": {
+    "title": "Configuración",
+    "tabs": {
+      "appearance": "Apariencia",
+      "content_types": "Tipos de contenido",
+      "categories": "Categorías",
+      "collections": "Colecciones",
+      "behavior": "Comportamiento",
+      "about": "Acerca de"
+    },
+    "appearance": {
+      "theme_title": "Tema",
+      "theme_desc": "Elige una paleta de colores para la interfaz",
+      "language_title": "Idioma",
+      "language_desc": "Selecciona el idioma de la interfaz"
+    },
+    "content_types": {
+      "section_title": "Tipos de contenido y reglas",
+      "section_desc": "Define tipos y los patrones regex usados para detectarlos. Min hits = cuántos patrones deben coincidir."
+    },
+    "categories": {
+      "section_title": "Categorías y reglas",
+      "section_desc": "Asigna entradas a categorías según la app origen y/o patrones regex en el título de ventana."
+    },
+    "collections_section": {
+      "section_title": "Colecciones",
+      "section_desc": "Organiza entradas en grupos con nombre. Las entradas en una colección nunca se eliminan automáticamente."
+    },
+    "behavior": {
+      "section_title": "Comportamiento",
+      "section_desc": "Controla cómo la app carga y retiene entradas del portapapeles",
+      "page_size_label": "Entradas por página",
+      "page_size_desc": "Cuántas entradas se cargan a la vez al hacer scroll.",
+      "max_history_label": "Máx. entradas en historial",
+      "max_history_desc": "Conserva solo las últimas N entradas. Los favoritos nunca se eliminan. <code>0</code> = ilimitado.",
+      "retention_label": "Eliminar después de (días)",
+      "retention_desc": "Elimina entradas con más de N días. Los favoritos nunca se eliminan. <code>0</code> = nunca.",
+      "dedup_label": "Intervalo de deduplicación (min)",
+      "dedup_desc": "Con qué frecuencia se eliminan entradas duplicadas, conservando la copia más reciente. <code>0</code> = desactivado.",
+      "max_bytes_label": "Máx. bytes a analizar",
+      "max_bytes_desc": "El contenido más largo que esto se trunca antes de aplicar patrones. <code>0</code> = sin límite."
+    }
+  },
+  "collections_mgr": {
+    "no_collections": "Sin colecciones todavía",
+    "entries_count_one": "{{count}} entrada",
+    "entries_count_other": "{{count}} entradas",
+    "new_collection": "Nueva colección",
+    "name_placeholder": "Nombre…"
+  },
+  "categories_mgr": {
+    "rules_count_one": "{{count}} regla",
+    "rules_count_other": "{{count}} reglas",
+    "collapse": "Contraer",
+    "expand_rules": "Expandir reglas",
+    "delete_category": "Eliminar categoría",
+    "color": "color",
+    "context_rules_title": "Reglas de contexto — coinciden por app origen y/o título de ventana (regex)",
+    "no_rules": "Sin reglas definidas",
+    "app": "app",
+    "title_label": "título",
+    "add_rule": "Agregar regla",
+    "app_pattern_placeholder": "Regex para app origen…",
+    "title_pattern_placeholder": "Regex para título de ventana…",
+    "priority": "prioridad",
+    "disable_rule": "Desactivar regla",
+    "enable_rule": "Activar regla",
+    "delete_rule": "Eliminar regla",
+    "new_category": "Nueva categoría",
+    "name_placeholder": "Nombre…"
+  },
+  "content_types_mgr": {
+    "rules_count_one": "{{count}} regla",
+    "rules_count_other": "{{count}} reglas",
+    "collapse": "Contraer",
+    "expand_rules": "Expandir reglas",
+    "delete_type": "Eliminar tipo",
+    "color": "color",
+    "no_rules": "Sin reglas definidas",
+    "min_hits": "min_hits: {{n}}",
+    "priority_display": "p: {{n}}",
+    "add_rule": "Agregar regla",
+    "pattern_placeholder": "Patrón regex…",
+    "min_hits_label": "min_hits",
+    "priority_label": "prioridad",
+    "disable_rule": "Desactivar regla",
+    "enable_rule": "Activar regla",
+    "delete_rule": "Eliminar regla",
+    "new_type": "Nuevo tipo de contenido",
+    "name_placeholder": "nombre (ej. json)",
+    "label_placeholder": "etiqueta (ej. JSON)"
+  },
+  "app": {
+    "footer_hint": "Clic para vista previa · Hover para acciones",
+    "version": "clipboard-tool v1.0",
+    "delete_error_fallback": "No se pudo eliminar la entrada.",
+    "delete_error_in_collection": "La entrada pertenece a la(s) colección(es): {{names}}. Quítala de todas las colecciones antes de eliminarla."
+  },
+  "about": {
+    "description": "Gestor de portapapeles local. Sin sincronización en la nube ni telemetría.",
+    "version_label": "Versión",
+    "license_label": "Licencia",
+    "author_label": "Autor",
+    "source_label": "Código fuente",
+    "frontend_title": "Frontend",
+    "backend_title": "Backend (Rust)",
+    "mit": "MIT",
+    "apache2": "Apache 2.0",
+    "mit_apache": "MIT / Apache 2.0",
+    "bsd3": "BSD-3-Clause",
+    "public_domain": "Dominio público"
+  }
+}
