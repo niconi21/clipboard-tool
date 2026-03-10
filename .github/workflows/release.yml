@@ -37,6 +37,10 @@ jobs:
             libxdo-dev \
             libssl-dev
 
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos-latest'
+        run: brew install create-dmg
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
