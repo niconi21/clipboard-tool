@@ -305,10 +305,11 @@ function App() {
       <div
         className="flex items-center gap-2 shrink-0 cursor-grab active:cursor-grabbing"
         onMouseDown={(e) => {
-          if (e.button === 0) {
+          if (e.button === 0 && e.detail === 1) {
             getCurrentWindow().startDragging().catch(console.error);
           }
         }}
+        onDoubleClick={() => getCurrentWindow().toggleMaximize().catch(console.error)}
       >
         {currentOS === "macos" && (
           <div className="pl-3 pt-3 pb-2 pointer-events-auto shrink-0">
@@ -324,6 +325,11 @@ function App() {
             </svg>
           )}
           <span className="text-xs font-medium text-content-2 tracking-wide">CLIPBOARD</span>
+          {import.meta.env.DEV && (
+            <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+              development environment
+            </span>
+          )}
           <span className="text-xs text-content-3 ml-auto">
             {t(entries.length === 1 ? "collections_mgr.entries_count_one" : "collections_mgr.entries_count_other", { count: entries.length })}
           </span>
