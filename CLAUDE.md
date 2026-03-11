@@ -82,7 +82,7 @@ clipboard-tool/
 ## Key Architecture Decisions
 
 - **Bootstrap**: single `bootstrap` IPC command on mount replaces 7 parallel calls — returns settings, themes, content_types, collections, collection_counts, languages, entry_counts. `useClipboard` is gated by `ready` flag until bootstrap resolves (prevents double fetch)
-- **Clipboard watcher**: dedicated Rust thread polling `arboard` every ~500ms
+- **Clipboard watcher**: dedicated Rust thread polling `arboard` — **500ms when window is visible, 2000ms when hidden** (adaptive polling, 4× fewer idle wake-ups)
 - **Self-copy prevention**: `AppCopiedContent(Arc<Mutex<Option<String>>>)` — set before writing, consumed once by watcher
 - **Content classification**: DB-driven rules (`context_rules` + `content_type_rules` tables), compiled at startup, refreshed on mutation via `RulesCache`. Max bytes configurable via `content_analysis_max_bytes` setting
 - **Window state persistence**: `window_state.rs` saves x/y/width/height with trailing-edge 600ms debounce. `WindowSaveState` has an `initialized: AtomicBool` flag — events are ignored until the user first opens the window (prevents startup X11 resize events from overwriting saved DB values with Tauri config defaults)
@@ -106,6 +106,15 @@ content_type_rules -- id, content_type→content_types, pattern, min_hits, prior
 settings           -- key (PK), value, updated_at
 themes             -- slug (PK), name, base, surface, surface_raised, surface_active, stroke, stroke_strong, content, content_2, content_3, accent, accent_text, is_builtin
 ```
+
+### Indexes on `entries`
+
+| Index | Column | Purpose |
+|-------|--------|---------|
+| `idx_entries_created_at` | `created_at DESC` | ORDER BY on every `get_entries` call |
+| `idx_entries_source_app` | `source_app` | App filter |
+| `idx_entries_content_type` | `content_type` | Type filter |
+| `idx_entries_category_id` | `category_id` | Category filter |
 
 ### Key settings keys
 | Key | Default | Purpose |
@@ -207,8 +216,25 @@ All filter options are loaded from DB (distinct values). Each uses `TypeaheadSel
 
 - **Linux (primary dev)**: X11. Global shortcut and clipboard polling work. Tray right-click for menu.
 - **macOS**: Window controls (traffic lights) on the left. Untested beyond UI.
-- **Windows**: Window controls (flat Fluent style) on the right. Known bug: duplicate tray icon (#5).
+- **Windows**: Window controls (flat Fluent style) on the right. Fix applied for duplicate tray icon (#5) — pending validation on Windows.
 - **Wayland**: May have limitations with global hotkeys and clipboard polling.
+
+## Dev environment isolation
+
+`npm run tauri:dev` sets `XDG_DATA_HOME=/tmp/clipboard-test` so dev data never touches the production DB at `~/.local/share/com.clipboard-tool.app/`.
+
+A `[dev]` badge appears in the title bar (`import.meta.env.DEV`) and tray tooltip (`cfg!(debug_assertions)`) to distinguish dev from prod at a glance.
+
+## Workspace structure
+
+Scripts and tooling live outside the repo to avoid polluting version control:
+
+```
+mvps/
+├── clipboard-tool/       # git repo
+└── scripts/              # not versioned
+    └── measure-cpu.sh    # validates adaptive polling (visible vs hidden CPU usage)
+```
 
 ## Build & Release
 
