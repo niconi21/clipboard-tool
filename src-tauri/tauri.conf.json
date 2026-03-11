@@ -44,6 +44,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "niconi21",
+    "copyright": "Copyright © 2026 niconi21. MIT License.",
+    "shortDescription": "Cross-platform clipboard manager",
+    "longDescription": "A local-first clipboard history manager. Capture, search, and organize everything you copy — text, URLs, code, colors and more.",
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
   }
 }
