@@ -41,7 +41,12 @@ pub fn start_watcher(app: AppHandle) {
         let mut last_content = initial;
 
         loop {
-            std::thread::sleep(Duration::from_millis(500));
+            let visible = app
+                .get_webview_window("main")
+                .and_then(|w| w.is_visible().ok())
+                .unwrap_or(false);
+            let poll_ms = if visible { 500 } else { 2000 };
+            std::thread::sleep(Duration::from_millis(poll_ms));
 
             let current = match clipboard.get_text() {
                 Ok(text) if !text.is_empty() => text,
