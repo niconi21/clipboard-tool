@@ -12,24 +12,24 @@ Cross-platform clipboard manager built with Tauri 2.0 + Rust + React + TypeScrip
 
 ## Rust Crates
 
-| Crate | Purpose |
-|-------|---------|
-| `arboard` | Read/write system clipboard |
-| `sqlx` | SQLite async queries |
-| `regex` | Content classification rules |
-| `tokio` | Async runtime + timer for flush tasks (only `time` feature — no `try_join!`) |
-| `tauri-plugin-opener` | Open URLs/emails in system browser/client |
-| `tauri-plugin-autostart` | Launch at system startup (`--minimized`) |
-| `tauri-plugin-global-shortcut` | Global hotkey to show/hide window |
-| `tauri-plugin-clipboard-manager` | Clipboard capability (capabilities JSON) |
+| Crate                            | Purpose                                                                      |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| `arboard`                        | Read/write system clipboard                                                  |
+| `sqlx`                           | SQLite async queries                                                         |
+| `regex`                          | Content classification rules                                                 |
+| `tokio`                          | Async runtime + timer for flush tasks (only `time` feature — no `try_join!`) |
+| `tauri-plugin-opener`            | Open URLs/emails in system browser/client                                    |
+| `tauri-plugin-autostart`         | Launch at system startup (`--minimized`)                                     |
+| `tauri-plugin-global-shortcut`   | Global hotkey to show/hide window                                            |
+| `tauri-plugin-clipboard-manager` | Clipboard capability (capabilities JSON)                                     |
 
 ## Frontend Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `highlight.js` | Syntax highlighting for code entries in DetailPanel |
-| `@tauri-apps/plugin-opener` | Open URLs/emails from React |
-| `react-i18next` / `i18next` | Internationalization |
+| Package                     | Purpose                                             |
+| --------------------------- | --------------------------------------------------- |
+| `highlight.js`              | Syntax highlighting for code entries in DetailPanel |
+| `@tauri-apps/plugin-opener` | Open URLs/emails from React                         |
+| `react-i18next` / `i18next` | Internationalization                                |
 
 ## Project Structure
 
@@ -109,35 +109,36 @@ themes             -- slug (PK), name, base, surface, surface_raised, surface_ac
 
 ### Indexes on `entries`
 
-| Index | Column | Purpose |
-|-------|--------|---------|
-| `idx_entries_created_at` | `created_at DESC` | ORDER BY on every `get_entries` call |
-| `idx_entries_source_app` | `source_app` | App filter |
-| `idx_entries_content_type` | `content_type` | Type filter |
-| `idx_entries_category_id` | `category_id` | Category filter |
+| Index                      | Column            | Purpose                              |
+| -------------------------- | ----------------- | ------------------------------------ |
+| `idx_entries_created_at`   | `created_at DESC` | ORDER BY on every `get_entries` call |
+| `idx_entries_source_app`   | `source_app`      | App filter                           |
+| `idx_entries_content_type` | `content_type`    | Type filter                          |
+| `idx_entries_category_id`  | `category_id`     | Category filter                      |
 
 ### Key settings keys
-| Key | Default | Purpose |
-|-----|---------|---------|
-| `content_analysis_max_bytes` | `8192` | Max bytes analyzed for classification |
-| `detail_panel_width` | `320` | Saved panel width (px) |
-| `active_theme` | `midnight` | Active theme slug |
-| `page_size` | `50` | Entries loaded per page |
-| `max_history_entries` | `0` | Auto-prune limit (0 = unlimited) |
-| `retention_days` | `0` | Auto-delete entries older than N days (0 = never) |
-| `language` | `en` | UI language (BCP 47 code) |
-| `window_x/y/width/height` | centered | Window position/size persistence |
+
+| Key                          | Default    | Purpose                                           |
+| ---------------------------- | ---------- | ------------------------------------------------- |
+| `content_analysis_max_bytes` | `8192`     | Max bytes analyzed for classification             |
+| `detail_panel_width`         | `320`      | Saved panel width (px)                            |
+| `active_theme`               | `midnight` | Active theme slug                                 |
+| `page_size`                  | `50`       | Entries loaded per page                           |
+| `max_history_entries`        | `0`        | Auto-prune limit (0 = unlimited)                  |
+| `retention_days`             | `0`        | Auto-delete entries older than N days (0 = never) |
+| `language`                   | `en`       | UI language (BCP 47 code)                         |
+| `window_x/y/width/height`    | centered   | Window position/size persistence                  |
 
 ## Settings Panel Tabs
 
-| Tab | Content |
-|-----|---------|
-| Appearance | Theme selector + language selector |
-| Content Types | `ContentTypesManager` — CRUD for types + detection rules; color editable inline when expanded |
-| Categories | `CategoriesManager` — CRUD for categories + context rules; color editable inline when expanded |
-| Collections | `CollectionsManager` — CRUD for collections |
-| Behavior | Page size, max history entries, retention days, max bytes to analyze |
-| About | App version, license, author, tech stack with SPDX license badges |
+| Tab           | Content                                                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| Appearance    | Theme selector + language selector                                                             |
+| Content Types | `ContentTypesManager` — CRUD for types + detection rules; color editable inline when expanded  |
+| Categories    | `CategoriesManager` — CRUD for categories + context rules; color editable inline when expanded |
+| Collections   | `CollectionsManager` — CRUD for collections                                                    |
+| Behavior      | Page size, max history entries, retention days, max bytes to analyze                           |
+| About         | App version, license, author, tech stack with SPDX license badges                              |
 
 ## Tauri Commands
 
@@ -192,19 +193,20 @@ set_active_theme(slug)
 
 ## Content Types & Rendering
 
-| Type | Renderer |
-|------|----------|
-| `text` | Plain monospace pre |
-| `url` | Clickable link + "Open in browser" button (`openUrl`) |
-| `email` | Email display + "Open email client" button (`mailto:`) |
-| `phone` | Phone icon + large monospace number |
-| `color` | Full-width color swatch + hex value |
-| `code` | `highlight.js` syntax highlighting (auto-detect, inline dark theme) |
-| `json` / `sql` / `shell` / `markdown` | `CodeRenderer` with explicit language hint |
+| Type                                  | Renderer                                                            |
+| ------------------------------------- | ------------------------------------------------------------------- |
+| `text`                                | Plain monospace pre                                                 |
+| `url`                                 | Clickable link + "Open in browser" button (`openUrl`)               |
+| `email`                               | Email display + "Open email client" button (`mailto:`)              |
+| `phone`                               | Phone icon + large monospace number                                 |
+| `color`                               | Full-width color swatch + hex value                                 |
+| `code`                                | `highlight.js` syntax highlighting (auto-detect, inline dark theme) |
+| `json` / `sql` / `shell` / `markdown` | `CodeRenderer` with explicit language hint                          |
 
 ## Filter System
 
 Filters are in a collapsible panel behind the "Filters" button in SearchBar:
+
 - **Type** — content_type exact match
 - **App** — source_app exact match
 - **Category** — category exact match
@@ -246,6 +248,7 @@ npm run build              # frontend only (type check + vite)
 ```
 
 Tag push triggers GitHub Actions cross-platform build:
+
 ```bash
 git tag v1.x.x && git push origin v1.x.x
 ```
@@ -270,11 +273,30 @@ To reset completely: `rm -rf ~/.local/share/com.clipboard-tool.app/`
 GitHub: https://github.com/niconi21/clipboard-tool
 
 ### Project boards
+
 - **v1.1.0 features**: https://github.com/users/niconi21/projects/10
 - **Bugs**: https://github.com/users/niconi21/projects/11
 
+### Issue workflow
+
+All issues (bugs, features, enhancements) follow this status flow on the project boards:
+
+```
+Todo → In Progress → Pending Validation → Done
+```
+
+| Status                 | When to set                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| **In Progress**        | When development starts on the issue                                                        |
+| **Pending Validation** | When the code change is complete and ready for testing                                      |
+| **Done**               | After validation passes (manual testing by a person or automated/LLM-assisted verification) |
+
+When working on an issue, always move it to **In Progress** before starting and to **Pending Validation** once the implementation is complete. Only move to **Done** after the fix or feature has been validated.
+
 ### SSH remote
+
 Uses `personal-github` SSH alias (key: `~/.ssh/personal_github`):
+
 ```
 git remote set-url origin git@personal-github:niconi21/clipboard-tool.git
 ```

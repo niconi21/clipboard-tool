@@ -9,7 +9,11 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "XDG_DATA_HOME=/tmp/clipboard-test tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "cargo:clean": "cargo clean --manifest-path src-tauri/Cargo.toml",
+    "cargo:check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "clean": "npm run cargo:clean && rm -rf dist",
+    "clean:dev": "rm -rf /tmp/clipboard-test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
