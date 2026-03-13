@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
@@ -10,6 +11,7 @@ import { SearchBar } from "./components/SearchBar";
 import { EntryList } from "./components/EntryList";
 import { DetailPanel } from "./components/DetailPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { SubcollectionPanel } from "./components/SubcollectionPanel";
 import { WindowControls } from "./components/WindowControls";
 import { useClipboard, EMPTY_FILTERS } from "./hooks/useClipboard";
 import type { ClipboardFilters } from "./hooks/useClipboard";
@@ -17,18 +19,23 @@ import { useContentTypes } from "./hooks/useContentTypes";
 import { useTheme } from "./hooks/useTheme";
 import { useCollections } from "./hooks/useCollections";
 import { currentOS } from "./hooks/useOS";
-import type { BootstrapData, Category, ClipboardEntry, ContentRule, ContextRule, Setting } from "./types";
+import type { BootstrapData, Category, ClipboardEntry, CollectionRule, ContentRule, ContextRule, Setting, Theme } from "./types";
+import type { ThemeColors } from "./components/SettingsPanel";
 
 const PANEL_MIN = 180;
 const PANEL_DEFAULT = 320;
 
 function App() {
+  const [appVersion, setAppVersion] = useState("");
+  useEffect(() => { getVersion().then(setAppVersion); }, []);
+
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ClipboardFilters>(EMPTY_FILTERS);
   const [selectedEntry, setSelectedEntry] = useState<ClipboardEntry | null>(null);
   const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "favorites" | number>("all");
+  const [activeSubcollection, setActiveSubcollection] = useState<number | null>(null);
   const [counts, setCounts] = useState<{ all: number; favorites: number }>({ all: 0, favorites: 0 });
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const { t } = useTranslation();
@@ -37,15 +44,21 @@ function App() {
   const [boot, setBoot] = useState<BootstrapData | null>(null);
   const ready = boot !== null;
 
+  // ── Settings state — managed in App ─────────────────────────────────────────
+  const [localSettings, setLocalSettings] = useState<Setting[]>([]);
+  const settingsLoadedRef = useRef(false);
+
   // Derive stable values from bootstrap data
   const allSettings = boot?.settings ?? [];
-  const themes      = boot?.themes ?? [];
+  const [themes, setThemes] = useState<Theme[]>([]);
   const languages   = boot?.languages ?? [];
 
   function getSetting(key: string, fallback: string): string {
     return allSettings.find((s) => s.key === key)?.value ?? fallback;
   }
-  const activeThemeSlug = getSetting("active_theme", "midnight");
+  const activeThemeSlug =
+    localSettings.find((s) => s.key === "active_theme")?.value ??
+    getSetting("active_theme", "midnight");
   const pageSize        = parseInt(getSetting("page_size", "50"), 10) || 50;
 
   // Memoize initial data objects so hook effects only fire once per bootstrap
@@ -54,44 +67,54 @@ function App() {
     () => boot ? {
       collections: boot.collections,
       counts: Object.fromEntries(boot.collection_counts.map(([id, n]) => [id, n])),
+      subcollections: boot.subcollections,
     } : undefined,
     [boot],
   );
 
-  useEffect(() => {
+  const runBootstrap = useCallback(() => {
     invoke<BootstrapData>("bootstrap")
       .then((data) => {
-        // Apply language before first render
         const lang = data.settings.find((s) => s.key === "language")?.value;
         if (lang) i18n.changeLanguage(lang);
 
-        // Set entry counts from bootstrap
         const [all, favorites] = data.entry_counts;
         setCounts({ all, favorites });
 
-        // Restore panel width
         const w = parseInt(data.settings.find((s) => s.key === "detail_panel_width")?.value ?? "", 10);
         if (!isNaN(w)) { setPanelWidth(w); panelWidthRef.current = w; }
 
+        setThemes(data.themes);
+        setLocalSettings(data.settings);
+        settingsLoadedRef.current = false; // force reload of settings-panel data
         setBoot(data);
       })
       .catch(console.error);
   }, []);
 
+  useEffect(() => { runBootstrap(); }, [runBootstrap]);
+
   // ── Hooks — only fetch if not seeded from bootstrap ─────────────────────────
   const { contentTypes, colorFor, labelFor, refresh: refreshContentTypes } = useContentTypes(initialContentTypes);
   const { activeTheme, setTheme } = useTheme(themes, activeThemeSlug);
-  const { collections, userCollections, counts: collectionCounts, create: createCollection, update: updateCollection, remove: removeCollection, refreshCounts: refreshCollectionCounts } = useCollections(initialCollections);
-  const { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite } = useClipboard(
+  const {
+    collections, userCollections, counts: collectionCounts, subcollections,
+    create: createCollection, update: updateCollection, remove: removeCollection, refreshCounts: refreshCollectionCounts,
+    subcollectionsFor, createSubcollection, renameSubcollection, removeSubcollection,
+  } = useCollections(initialCollections);
+  // Derive the active collection id (for favorites, use the builtin collection)
+  const favoritesId = collections.find((c) => c.is_builtin)?.id ?? null;
+  const activeCollectionId = activeTab === "favorites" ? favoritesId : (typeof activeTab === "number" ? activeTab : null);
+  const [subCountKey, setSubCountKey] = useState(0);
+  const bumpSubCounts = useCallback(() => setSubCountKey((k) => k + 1), []);
+
+  const { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType } = useClipboard(
     search, filters, pageSize,
     activeTab === "favorites",
-    typeof activeTab === "number" ? activeTab : null,
+    activeCollectionId,
+    activeSubcollection,
     ready, // don't fetch until bootstrap resolved
   );
-
-  // ── Settings state — managed in App ─────────────────────────────────────────
-  const [localSettings, setLocalSettings] = useState<Setting[]>([]);
-  const settingsLoadedRef = useRef(false);
 
   // ── Panel resize ─────────────────────────────────────────────────────────────
   const containerRef    = useRef<HTMLDivElement>(null);
@@ -163,16 +186,17 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    listen("clipboard-new-entry", () => { if (!cancelled) loadCounts(); })
+    listen("clipboard-new-entry", () => { if (!cancelled) { loadCounts(); refreshCollectionCounts(); bumpSubCounts(); } })
       .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
       .catch(console.error);
     return () => { cancelled = true; unlisten?.(); };
-  }, [loadCounts]);
+  }, [loadCounts, refreshCollectionCounts, bumpSubCounts]);
 
   // ── Settings panel — lazy load, cached after first open ──────────────────────
   const [categories, setCategories] = useState<Category[]>([]);
   const [contextRules, setContextRules] = useState<ContextRule[]>([]);
   const [contentTypeRules, setContentTypeRules] = useState<ContentRule[]>([]);
+  const [collectionRules, setCollectionRules] = useState<CollectionRule[]>([]);
 
   useEffect(() => {
     if (!settingsOpen || settingsLoadedRef.current) return;
@@ -180,6 +204,7 @@ function App() {
     invoke<Category[]>("get_all_categories").then(setCategories).catch(console.error);
     invoke<ContextRule[]>("get_all_context_rules").then(setContextRules).catch(console.error);
     invoke<ContentRule[]>("get_all_content_type_rules").then(setContentTypeRules).catch(console.error);
+    invoke<CollectionRule[]>("get_all_collection_rules").then(setCollectionRules).catch(console.error);
     // Merge bootstrap settings with any live updates
     setLocalSettings(allSettings);
   }, [settingsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -187,6 +212,7 @@ function App() {
   // ── Handlers ─────────────────────────────────────────────────────────────────
   function handleTabChange(tab: "all" | "favorites" | number) {
     setActiveTab(tab);
+    setActiveSubcollection(null);
     setSelectedEntry(null);
   }
 
@@ -196,15 +222,21 @@ function App() {
 
   function handleDelete(id: number) {
     if (selectedEntry?.id === id) setSelectedEntry(null);
-    removeEntry(id)
-      .then(() => { loadCounts(); refreshCollectionCounts(); })
+    // Context-aware: subcollection → unlink from sub, collection → unlink from col, all/favorites → permanent delete
+    const colId = (typeof activeTab === "number") ? activeTab : (activeTab === "favorites" ? favoritesId : null);
+    const subId = activeSubcollection;
+    removeEntry(id, colId, subId)
+      .then(() => { loadCounts(); refreshCollectionCounts(); bumpSubCounts(); })
       .catch((e: unknown) => {
         let msg: string;
         if (typeof e === "string" && e.startsWith("ENTRY_IN_COLLECTION:")) {
           const names = e.slice("ENTRY_IN_COLLECTION:".length);
           msg = t("app.delete_error_in_collection", { names });
+        } else if (typeof e === "string" && e.startsWith("ENTRY_IN_SUBCOLLECTION:")) {
+          const name = e.slice("ENTRY_IN_SUBCOLLECTION:".length);
+          msg = t("app.delete_error_in_subcollection", { name });
         } else {
-          msg = t("app.delete_error_fallback");
+          msg = typeof e === "string" ? e : t("app.delete_error_fallback");
         }
         setDeleteError(msg);
         setTimeout(() => setDeleteError(null), 5000);
@@ -214,10 +246,16 @@ function App() {
   function handleToggleFavorite(id: number) {
     toggleFavorite(id);
     loadCounts();
+    refreshCollectionCounts();
+    bumpSubCounts();
   }
 
-  const handleCopy = useCallback((content: string) => {
-    invoke("copy_to_clipboard", { content }).catch(console.error);
+  const handleCopy = useCallback((entry: ClipboardEntry) => {
+    if (entry.content_type === "image") {
+      invoke("copy_image_to_clipboard", { path: entry.content }).catch(console.error);
+    } else {
+      invoke("copy_to_clipboard", { content: entry.content }).catch(console.error);
+    }
   }, []);
 
   function handleSettingChange(key: string, value: string) {
@@ -295,6 +333,70 @@ function App() {
     setContextRules(await invoke("get_all_context_rules"));
   }
 
+  async function handleCreateCollectionRule(collectionId: number, contentType: string | null, sourceApp: string | null, windowTitle: string | null, contentPattern: string | null, priority: number) {
+    await invoke("create_collection_rule", { collectionId, contentType, sourceApp, windowTitle, contentPattern, priority });
+    setCollectionRules(await invoke("get_all_collection_rules"));
+  }
+
+  async function handleDeleteCollectionRule(id: number) {
+    await invoke("delete_collection_rule", { id });
+    setCollectionRules(await invoke("get_all_collection_rules"));
+  }
+
+  async function handleToggleCollectionRule(id: number, enabled: boolean) {
+    await invoke("toggle_collection_rule", { id, enabled });
+    setCollectionRules((prev) => prev.map((r) => r.id === id ? { ...r, enabled } : r));
+  }
+
+  // ── Config import ──────────────────────────────────────────────────────────
+  const handleConfigImported = useCallback(() => {
+    runBootstrap();
+  }, [runBootstrap]);
+
+  // ── Reclassify ─────────────────────────────────────────────────────────────
+  async function handleReclassify(includeOverrides: boolean): Promise<number> {
+    const count = await invoke<number>("reclassify_entries", { includeOverrides });
+    loadCounts();
+    refreshCollectionCounts();
+    return count;
+  }
+
+  // ── Theme CRUD ──────────────────────────────────────────────────────────────
+  function colorsToCamel(c: ThemeColors) {
+    return {
+      base: c.base, surface: c.surface, surfaceRaised: c.surface_raised,
+      surfaceActive: c.surface_active, stroke: c.stroke, strokeStrong: c.stroke_strong,
+      content: c.content, content2: c.content_2, content3: c.content_3,
+      accent: c.accent, accentText: c.accent_text,
+    };
+  }
+
+  async function handleCreateTheme(name: string, colors: ThemeColors) {
+    const slug = name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const theme = await invoke<Theme>("create_theme", { slug, name, ...colorsToCamel(colors) });
+    setThemes((prev) => [...prev, theme]);
+  }
+
+  async function handleUpdateTheme(slug: string, name: string, colors: ThemeColors) {
+    await invoke("update_theme", { slug, name, ...colorsToCamel(colors) });
+    setThemes((prev) => prev.map((t) =>
+      t.slug === slug ? { ...t, name, ...colors } : t
+    ));
+  }
+
+  async function handleDeleteTheme(slug: string) {
+    await invoke("delete_theme", { slug });
+    setThemes((prev) => prev.filter((t) => t.slug !== slug));
+    // If the deleted theme was active, switch to first available
+    if (activeThemeSlug === slug && themes.length > 1) {
+      const fallback = themes.find((t) => t.slug !== slug);
+      if (fallback) {
+        setTheme(fallback.slug);
+        handleSettingChange("active_theme", fallback.slug);
+      }
+    }
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div
@@ -369,7 +471,14 @@ function App() {
             onClose={() => setSettingsOpen(false)}
             onSettingChange={handleSettingChange}
             onContentTypeColorChange={handleContentTypeColorChange}
-            onThemeChange={(slug) => { setTheme(slug); }}
+            onThemeChange={(slug) => {
+              setTheme(slug);
+              setLocalSettings((prev) =>
+                prev.some((s) => s.key === "active_theme")
+                  ? prev.map((s) => s.key === "active_theme" ? { ...s, value: slug } : s)
+                  : [...prev, { key: "active_theme", value: slug, updated_at: "" }]
+              );
+            }}
             onCreateCollection={async (name, color) => { await createCollection(name, color); }}
             onUpdateCollection={async (id, name, color) => { await updateCollection(id, name, color); }}
             onDeleteCollection={async (id) => { await removeCollection(id); if (activeTab === id) handleTabChange("all"); refreshCollectionCounts(); }}
@@ -384,6 +493,19 @@ function App() {
             onDeleteContextRule={handleDeleteContextRule}
             onToggleContextRule={handleToggleContextRule}
             onToggleContentTypeRule={handleToggleContentTypeRule}
+            collectionRules={collectionRules}
+            onCreateCollectionRule={handleCreateCollectionRule}
+            onDeleteCollectionRule={handleDeleteCollectionRule}
+            onToggleCollectionRule={handleToggleCollectionRule}
+            subcollections={subcollections}
+            onCreateSubcollection={createSubcollection}
+            onRenameSubcollection={renameSubcollection}
+            onDeleteSubcollection={removeSubcollection}
+            onCreateTheme={handleCreateTheme}
+            onUpdateTheme={handleUpdateTheme}
+            onDeleteTheme={handleDeleteTheme}
+            onReclassify={handleReclassify}
+            onConfigImported={handleConfigImported}
           />
         </div>
       ) : (
@@ -431,9 +553,22 @@ function App() {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden" ref={containerRef}>
+        {activeCollectionId !== null && (
+          <SubcollectionPanel
+            collectionId={activeCollectionId}
+            subcollections={subcollectionsFor(activeCollectionId)}
+            activeSubcollection={activeSubcollection}
+            refreshKey={subCountKey}
+            onSelect={setActiveSubcollection}
+            onCreate={createSubcollection}
+            onRename={renameSubcollection}
+            onDelete={removeSubcollection}
+          />
+        )}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           <EntryList
             entries={entries}
+            collections={collections}
             loading={loading}
             loadingMore={loadingMore}
             hasMore={hasMore}
@@ -459,10 +594,21 @@ function App() {
               <DetailPanel
                 entry={selectedEntry}
                 collections={collections}
+                subcollections={subcollections}
+                contentTypes={contentTypes}
                 colorFor={colorFor}
-                labelFor={labelFor}
                 onClose={() => setSelectedEntry(null)}
-                onCollectionChanged={() => { refreshCollectionCounts(); loadCounts(); }}
+                onCollectionChanged={(entryId, collectionIds) => {
+              refreshCollectionCounts();
+              bumpSubCounts();
+              loadCounts();
+              patchEntryCollections(entryId, collectionIds);
+            }}
+                onAliasChanged={(entryId, alias) => patchEntryAlias(entryId, alias)}
+                onContentTypeChanged={(entryId, contentType) => {
+              patchEntryContentType(entryId, contentType);
+              setSelectedEntry((prev) => prev && prev.id === entryId ? { ...prev, content_type: contentType } : prev);
+            }}
               />
             </div>
           </>
@@ -472,7 +618,7 @@ function App() {
       {/* Footer */}
       <div className="flex items-center justify-between px-4 py-2 border-t border-stroke shrink-0">
         <span className="text-[11px] text-content-3">{t("app.footer_hint")}</span>
-        <span className="text-[11px] text-content-3">{t("app.version")}</span>
+        <span className="text-[11px] text-content-3">clipboard-tool {appVersion ? `v${appVersion}` : "…"}</span>
       </div>
       </>
       )}

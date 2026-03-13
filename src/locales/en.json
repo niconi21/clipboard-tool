@@ -54,7 +54,12 @@
     "window": "Window",
     "category": "Category",
     "status": "Status",
-    "favorite": "Favorite"
+    "favorite": "Favorite",
+    "alias_add": "Add alias…",
+    "alias_edit": "Edit alias",
+    "alias_placeholder": "Alias…",
+    "alias_clear": "Clear alias",
+    "change_type": "Change content type"
   },
   "collection_selector": {
     "add": "Add to collection",
@@ -64,7 +69,11 @@
   "content_renderer": {
     "open_browser": "Open in browser",
     "non_http": "Non-http URL — cannot be opened",
-    "open_email": "Open email client"
+    "open_email": "Open email client",
+    "md_preview": "Preview",
+    "md_source": "Source",
+    "image_loading": "Loading image…",
+    "image_error": "Image could not be loaded"
   },
   "typeahead": {
     "search": "Search...",
@@ -92,6 +101,25 @@
     "appearance": {
       "theme_title": "Theme",
       "theme_desc": "Choose a color palette for the interface",
+      "create_theme": "Create theme",
+      "edit_theme": "Edit",
+      "delete_theme": "Delete",
+      "duplicate_theme": "Duplicate",
+      "theme_name": "Name",
+      "theme_name_placeholder": "My theme",
+      "theme_save": "Save theme",
+      "theme_cancel": "Cancel",
+      "theme_slot_base": "Base",
+      "theme_slot_surface": "Surface",
+      "theme_slot_surface_raised": "Raised",
+      "theme_slot_surface_active": "Active",
+      "theme_slot_stroke": "Stroke",
+      "theme_slot_stroke_strong": "Stroke strong",
+      "theme_slot_content": "Text",
+      "theme_slot_content_2": "Text 2",
+      "theme_slot_content_3": "Text 3",
+      "theme_slot_accent": "Accent",
+      "theme_slot_accent_text": "Accent text",
       "language_title": "Language",
       "language_desc": "Select the interface language"
     },
@@ -119,7 +147,17 @@
       "dedup_label": "Dedup interval (minutes)",
       "dedup_desc": "How often to remove duplicate entries, keeping only the latest copy. <code>0</code> = disabled.",
       "max_bytes_label": "Max bytes to analyze",
-      "max_bytes_desc": "Content longer than this is truncated before pattern matching. <code>0</code> = no limit."
+      "max_bytes_desc": "Content longer than this is truncated before pattern matching. <code>0</code> = no limit.",
+      "max_image_label": "Max image size (bytes)",
+      "max_image_desc": "Maximum raw size of clipboard images to capture. <code>0</code> = no limit."
+    },
+    "reclassify": {
+      "button": "Re-classify entries",
+      "desc": "Re-apply content type and category rules to all existing entries.",
+      "confirm_title": "Re-classify all entries based on current rules?",
+      "include_overrides": "Include manually overridden entries",
+      "result": "{{count}} entries updated",
+      "running": "Re-classifying…"
     }
   },
   "collections_mgr": {
@@ -127,7 +165,25 @@
     "entries_count_one": "{{count}} entry",
     "entries_count_other": "{{count}} entries",
     "new_collection": "New collection",
-    "name_placeholder": "Name…"
+    "name_placeholder": "Name…",
+    "rules_count_one": "{{count}} rule",
+    "rules_count_other": "{{count}} rules",
+    "collapse": "Collapse",
+    "expand_rules": "Expand rules",
+    "rules_title": "Auto-assign rules — new entries matching these conditions are added automatically",
+    "no_rules": "No rules defined",
+    "content_type_label": "type",
+    "source_app_label": "app",
+    "window_title_label": "title",
+    "content_pattern_label": "content",
+    "priority": "priority",
+    "add_rule": "Add rule",
+    "source_app_placeholder": "Regex for source app…",
+    "window_title_placeholder": "Regex for window title…",
+    "content_pattern_placeholder": "Regex for content…",
+    "disable_rule": "Disable rule",
+    "enable_rule": "Enable rule",
+    "delete_rule": "Delete rule"
   },
   "categories_mgr": {
     "rules_count_one": "{{count}} rule",
@@ -173,9 +229,19 @@
   },
   "app": {
     "footer_hint": "Click to preview · Hover for actions",
-    "version": "clipboard-tool v1.0",
     "delete_error_fallback": "Could not delete entry.",
-    "delete_error_in_collection": "Entry belongs to collection(s): {{names}}. Remove it from all collections before deleting."
+    "delete_error_in_collection": "Entry belongs to collection(s): {{names}}. Remove it from all collections before deleting.",
+    "delete_error_in_subcollection": "Entry is in subcollection \"{{name}}\". Remove it from the subcollection first."
+  },
+  "subcollections": {
+    "all": "All",
+    "default_name": "Unclassified",
+    "title": "Subcollections",
+    "create_placeholder": "Subcollection name…",
+    "rename_placeholder": "New name…",
+    "delete_confirm": "Delete subcollection? Entries will move to the default.",
+    "count_one": "{{count}} entry",
+    "count_other": "{{count}} entries"
   },
   "about": {
     "description": "Local-only clipboard manager. No cloud sync, no telemetry.",
@@ -189,6 +255,14 @@
     "apache2": "Apache 2.0",
     "mit_apache": "MIT / Apache 2.0",
     "bsd3": "BSD-3-Clause",
-    "public_domain": "Public Domain"
+    "public_domain": "Public Domain",
+    "database_title": "Database",
+    "copy_path": "Copy path",
+    "config_title": "Configuration",
+    "config_desc": "Export or import your custom settings, themes, categories, content types, collections, and rules.",
+    "export_button": "Export",
+    "import_button": "Import",
+    "export_success": "Configuration exported",
+    "import_result": "Imported: {{total}} items"
   }
 }

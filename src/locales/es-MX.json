@@ -54,7 +54,12 @@
     "window": "Ventana",
     "category": "Categoría",
     "status": "Estado",
-    "favorite": "Favorito"
+    "favorite": "Favorito",
+    "alias_add": "Agregar alias…",
+    "alias_edit": "Editar alias",
+    "alias_placeholder": "Alias…",
+    "alias_clear": "Quitar alias",
+    "change_type": "Cambiar tipo de contenido"
   },
   "collection_selector": {
     "add": "Agregar a colección",
@@ -64,7 +69,11 @@
   "content_renderer": {
     "open_browser": "Abrir en navegador",
     "non_http": "URL no-http — no se puede abrir",
-    "open_email": "Abrir cliente de correo"
+    "open_email": "Abrir cliente de correo",
+    "md_preview": "Vista previa",
+    "md_source": "Fuente",
+    "image_loading": "Cargando imagen…",
+    "image_error": "No se pudo cargar la imagen"
   },
   "typeahead": {
     "search": "Buscar...",
@@ -92,6 +101,25 @@
     "appearance": {
       "theme_title": "Tema",
       "theme_desc": "Elige una paleta de colores para la interfaz",
+      "create_theme": "Crear tema",
+      "edit_theme": "Editar",
+      "delete_theme": "Eliminar",
+      "duplicate_theme": "Duplicar",
+      "theme_name": "Nombre",
+      "theme_name_placeholder": "Mi tema",
+      "theme_save": "Guardar tema",
+      "theme_cancel": "Cancelar",
+      "theme_slot_base": "Base",
+      "theme_slot_surface": "Superficie",
+      "theme_slot_surface_raised": "Elevada",
+      "theme_slot_surface_active": "Activa",
+      "theme_slot_stroke": "Borde",
+      "theme_slot_stroke_strong": "Borde fuerte",
+      "theme_slot_content": "Texto",
+      "theme_slot_content_2": "Texto 2",
+      "theme_slot_content_3": "Texto 3",
+      "theme_slot_accent": "Acento",
+      "theme_slot_accent_text": "Texto acento",
       "language_title": "Idioma",
       "language_desc": "Selecciona el idioma de la interfaz"
     },
@@ -119,7 +147,17 @@
       "dedup_label": "Intervalo de deduplicación (min)",
       "dedup_desc": "Con qué frecuencia se eliminan entradas duplicadas, conservando la copia más reciente. <code>0</code> = desactivado.",
       "max_bytes_label": "Máx. bytes a analizar",
-      "max_bytes_desc": "El contenido más largo que esto se trunca antes de aplicar patrones. <code>0</code> = sin límite."
+      "max_bytes_desc": "El contenido más largo que esto se trunca antes de aplicar patrones. <code>0</code> = sin límite.",
+      "max_image_label": "Máx. tamaño de imagen (bytes)",
+      "max_image_desc": "Tamaño máximo de imágenes del portapapeles a capturar. <code>0</code> = sin límite."
+    },
+    "reclassify": {
+      "button": "Reclasificar entradas",
+      "desc": "Vuelve a aplicar las reglas de tipo de contenido y categoría a todas las entradas existentes.",
+      "confirm_title": "¿Reclasificar todas las entradas según las reglas actuales?",
+      "include_overrides": "Incluir entradas con tipo cambiado manualmente",
+      "result": "{{count}} entradas actualizadas",
+      "running": "Reclasificando…"
     }
   },
   "collections_mgr": {
@@ -127,7 +165,25 @@
     "entries_count_one": "{{count}} entrada",
     "entries_count_other": "{{count}} entradas",
     "new_collection": "Nueva colección",
-    "name_placeholder": "Nombre…"
+    "name_placeholder": "Nombre…",
+    "rules_count_one": "{{count}} regla",
+    "rules_count_other": "{{count}} reglas",
+    "collapse": "Contraer",
+    "expand_rules": "Expandir reglas",
+    "rules_title": "Reglas de auto-asignación — las entradas nuevas que coincidan se agregan automáticamente",
+    "no_rules": "Sin reglas definidas",
+    "content_type_label": "tipo",
+    "source_app_label": "app",
+    "window_title_label": "título",
+    "content_pattern_label": "contenido",
+    "priority": "prioridad",
+    "add_rule": "Agregar regla",
+    "source_app_placeholder": "Regex para app de origen…",
+    "window_title_placeholder": "Regex para título de ventana…",
+    "content_pattern_placeholder": "Regex para contenido…",
+    "disable_rule": "Deshabilitar regla",
+    "enable_rule": "Habilitar regla",
+    "delete_rule": "Eliminar regla"
   },
   "categories_mgr": {
     "rules_count_one": "{{count}} regla",
@@ -173,9 +229,19 @@
   },
   "app": {
     "footer_hint": "Clic para vista previa · Hover para acciones",
-    "version": "clipboard-tool v1.0",
     "delete_error_fallback": "No se pudo eliminar la entrada.",
-    "delete_error_in_collection": "La entrada pertenece a la(s) colección(es): {{names}}. Quítala de todas las colecciones antes de eliminarla."
+    "delete_error_in_collection": "La entrada pertenece a la(s) colección(es): {{names}}. Quítala de todas las colecciones antes de eliminarla.",
+    "delete_error_in_subcollection": "La entrada está en la subcolección \"{{name}}\". Quítala de la subcolección primero."
+  },
+  "subcollections": {
+    "all": "Todas",
+    "default_name": "Sin clasificar",
+    "title": "Subcolecciones",
+    "create_placeholder": "Nombre de subcolección…",
+    "rename_placeholder": "Nuevo nombre…",
+    "delete_confirm": "¿Eliminar subcolección? Las entradas se moverán a la predeterminada.",
+    "count_one": "{{count}} entrada",
+    "count_other": "{{count}} entradas"
   },
   "about": {
     "description": "Gestor de portapapeles local. Sin sincronización en la nube ni telemetría.",
@@ -189,6 +255,14 @@
     "apache2": "Apache 2.0",
     "mit_apache": "MIT / Apache 2.0",
     "bsd3": "BSD-3-Clause",
-    "public_domain": "Dominio público"
+    "public_domain": "Dominio público",
+    "database_title": "Base de datos",
+    "copy_path": "Copiar ruta",
+    "config_title": "Configuración",
+    "config_desc": "Exporta o importa tus ajustes, temas, categorías, tipos de contenido, colecciones y reglas personalizadas.",
+    "export_button": "Exportar",
+    "import_button": "Importar",
+    "export_success": "Configuración exportada",
+    "import_result": "Importado: {{total}} elementos"
   }
 }

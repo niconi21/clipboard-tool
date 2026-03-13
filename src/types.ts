@@ -7,6 +7,8 @@ export interface ClipboardEntry {
   window_title: string | null;
   is_favorite: boolean;
   created_at: string;
+  collection_ids: string; // comma-separated collection ids, e.g. "1,3" or ""
+  alias: string | null;
 }
 
 export interface Category {
@@ -47,11 +49,33 @@ export interface ContentRule {
   created_at: string;
 }
 
+export interface CollectionRule {
+  id: number;
+  collection_id: number;
+  collection_name: string;
+  content_type: string | null;
+  source_app: string | null;
+  window_title: string | null;
+  content_pattern: string | null;
+  priority: number;
+  enabled: boolean;
+  is_builtin: boolean;
+  created_at: string;
+}
+
 export interface Collection {
   id: number;
   name: string;
   color: string;
   is_builtin: boolean;
+  created_at: string;
+}
+
+export interface Subcollection {
+  id: number;
+  collection_id: number;
+  name: string;
+  is_default: boolean;
   created_at: string;
 }
 
@@ -74,8 +98,21 @@ export interface BootstrapData {
   content_types:     ContentTypeStyle[];
   collections:       Collection[];
   collection_counts: [number, number][]; // [collection_id, count][]
+  subcollections:    Subcollection[];
   languages:         Language[];
   entry_counts:      [number, number];   // [all, favorites]
+}
+
+export interface ImportSummary {
+  settings: number;
+  themes: number;
+  categories: number;
+  content_types: number;
+  content_type_rules: number;
+  context_rules: number;
+  collections: number;
+  subcollections: number;
+  collection_rules: number;
 }
 
 export interface Theme {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { currentOS } from "../hooks/useOS";
 
 const win = getCurrentWindow();
@@ -35,7 +36,7 @@ export function WindowControls() {
   }
 
   async function hide() {
-    await win.hide();
+    await invoke("hide_window");
   }
 
   if (currentOS === "macos") {

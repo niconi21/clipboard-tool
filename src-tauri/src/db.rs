@@ -18,6 +18,8 @@ pub struct ClipboardEntry {
     pub window_title: Option<String>,
     pub is_favorite: bool, // computed: EXISTS in entry_collections for builtin collection
     pub created_at: String,
+    pub collection_ids: String,   // COALESCE(GROUP_CONCAT(DISTINCT collection_id), '')
+    pub alias: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, FromRow)]
@@ -35,6 +37,15 @@ pub struct Collection {
     pub name: String,
     pub color: String,
     pub is_builtin: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct Subcollection {
+    pub id: i64,
+    pub collection_id: i64,
+    pub name: String,
+    pub is_default: bool,
     pub created_at: String,
 }
 
@@ -84,6 +95,32 @@ pub struct ContentRule {
     pub created_at: String,
 }
 
+/// Collection auto-assignment rule: matches conditions to auto-add entries to a collection.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct CollectionRule {
+    pub id: i64,
+    pub collection_id: i64,
+    pub collection_name: String, // via LEFT JOIN collections
+    pub content_type: Option<String>,
+    pub source_app: Option<String>,
+    pub window_title: Option<String>,
+    pub content_pattern: Option<String>,
+    pub priority: i64,
+    pub enabled: bool,
+    pub is_builtin: bool,
+    pub created_at: String,
+}
+
+/// Lightweight version for the categorizer (no display fields).
+#[derive(Debug, Clone)]
+pub struct CollectionRuleRaw {
+    pub collection_id: i64,
+    pub content_type: Option<String>,
+    pub source_app: Option<String>,
+    pub window_title: Option<String>,
+    pub content_pattern: Option<String>,
+}
+
 pub struct DbState(pub SqlitePool);
 
 #[derive(Debug, serde::Serialize)]
@@ -93,6 +130,7 @@ pub struct BootstrapData {
     pub content_types:     Vec<ContentTypeStyle>,
     pub collections:       Vec<Collection>,
     pub collection_counts: Vec<(i64, i64)>,
+    pub subcollections:    Vec<Subcollection>,
     pub languages:         Vec<Language>,
     pub entry_counts:      (i64, i64),
 }
@@ -135,6 +173,9 @@ pub async fn init_pool(app: &AppHandle) -> Result<SqlitePool, sqlx::Error> {
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
 
+    std::fs::create_dir_all(data_dir.join("images"))
+        .map_err(|e| sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+
     let db_file = data_dir.join("clipboard.db");
 
     let options = SqliteConnectOptions::from_str(&format!("sqlite:{}", db_file.display()))
@@ -162,8 +203,59 @@ pub const IS_FAVORITE_SQL: &str = "EXISTS(
 
 // ── Migrations ────────────────────────────────────────────────────────────────
 
+/// Swallows "duplicate column name" errors from ALTER TABLE ADD COLUMN.
+/// Any other error is propagated.
+fn ignore_duplicate_column(
+    result: Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error>,
+) -> Result<(), sqlx::Error> {
+    match result {
+        Ok(_) => Ok(()),
+        Err(sqlx::Error::Database(ref e)) if e.message().contains("duplicate column name") => {
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     create_fresh_schema(pool).await?;
+
+    // Idempotent column additions for existing databases.
+    // "duplicate column name" error means it's already there — safe to ignore.
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE entries ADD COLUMN alias TEXT")
+            .execute(pool)
+            .await,
+    )?;
+
+    // Subcollections: add subcollection_id column to entry_collections (existing DBs)
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE entry_collections ADD COLUMN subcollection_id INTEGER REFERENCES subcollections(id)")
+            .execute(pool)
+            .await,
+    )?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_ec_subcollection ON entry_collections(subcollection_id)")
+        .execute(pool)
+        .await?;
+
+    // Seed default subcollection for every collection that doesn't have one yet
+    sqlx::query(
+        "INSERT OR IGNORE INTO subcollections (collection_id, name, is_default)
+         SELECT id, 'Sin clasificar', 1 FROM collections
+         WHERE id NOT IN (SELECT collection_id FROM subcollections WHERE is_default = 1)"
+    )
+    .execute(pool)
+    .await?;
+
+    // Backfill: assign default subcollection to entry_collections rows missing one
+    sqlx::query(
+        "UPDATE entry_collections SET subcollection_id = (
+            SELECT s.id FROM subcollections s
+            WHERE s.collection_id = entry_collections.collection_id AND s.is_default = 1
+        ) WHERE subcollection_id IS NULL"
+    )
+    .execute(pool)
+    .await?;
 
     // FK dependency order:
     //   categories      → before context_rules (context_rules.category_id)
@@ -219,6 +311,8 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             category_id  INTEGER REFERENCES categories(id),
             source_app   TEXT,
             window_title TEXT,
+            alias        TEXT,
+            manual_override INTEGER NOT NULL DEFAULT 0,
             created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
         )",
     )
@@ -253,14 +347,36 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .await?;
 
     sqlx::query(
-        "CREATE TABLE IF NOT EXISTS entry_collections (
-            entry_id      INTEGER NOT NULL REFERENCES entries(id)     ON DELETE CASCADE,
+        "CREATE TABLE IF NOT EXISTS subcollections (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
             collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+            name          TEXT    NOT NULL,
+            is_default    INTEGER NOT NULL DEFAULT 0,
+            created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(collection_id, name)
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_subcollections_collection ON subcollections(collection_id)")
+        .execute(pool)
+        .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS entry_collections (
+            entry_id          INTEGER NOT NULL REFERENCES entries(id)          ON DELETE CASCADE,
+            collection_id     INTEGER NOT NULL REFERENCES collections(id)      ON DELETE CASCADE,
+            subcollection_id  INTEGER REFERENCES subcollections(id),
             PRIMARY KEY (entry_id, collection_id)
         )",
     )
     .execute(pool)
     .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_ec_subcollection ON entry_collections(subcollection_id)")
+        .execute(pool)
+        .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS context_rules (
@@ -287,6 +403,23 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             enabled      INTEGER NOT NULL DEFAULT 1,
             is_builtin   INTEGER NOT NULL DEFAULT 1,
             created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS collection_rules (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            collection_id   INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+            content_type    TEXT    REFERENCES content_types(name),
+            source_app      TEXT,
+            window_title    TEXT,
+            content_pattern TEXT,
+            priority        INTEGER NOT NULL DEFAULT 0,
+            enabled         INTEGER NOT NULL DEFAULT 1,
+            is_builtin      INTEGER NOT NULL DEFAULT 0,
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
         )",
     )
     .execute(pool)
@@ -339,8 +472,10 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     //
     // Step 1: re-point entries from duplicate Favorites ids to the canonical (MIN) id
     sqlx::query(
-        "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id)
-         SELECT entry_id, (SELECT MIN(id) FROM collections WHERE is_builtin = 1 AND name = 'Favorites')
+        "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id, subcollection_id)
+         SELECT entry_id,
+                (SELECT MIN(id) FROM collections WHERE is_builtin = 1 AND name = 'Favorites'),
+                subcollection_id
          FROM entry_collections
          WHERE collection_id IN (
              SELECT id FROM collections
@@ -356,6 +491,15 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         "DELETE FROM collections
          WHERE is_builtin = 1 AND name = 'Favorites'
          AND id != (SELECT MIN(id) FROM collections WHERE is_builtin = 1 AND name = 'Favorites')",
+    )
+    .execute(pool)
+    .await?;
+
+    // Seed default subcollection for the builtin Favorites collection
+    sqlx::query(
+        "INSERT OR IGNORE INTO subcollections (collection_id, name, is_default)
+         SELECT id, 'Sin clasificar', 1 FROM collections
+         WHERE id NOT IN (SELECT collection_id FROM subcollections WHERE is_default = 1)",
     )
     .execute(pool)
     .await?;
@@ -489,34 +633,46 @@ async fn seed_content_rules(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             (r"^rgba?\(\s*\d+", 1, 25),
             (r"^hsla?\(\s*\d+", 1, 25),
         ]),
-        // ── JSON (priority 22) — min_hits=2: starts with {/[, has "key": pattern, ends with }/]
+        // ── JSON (priority 22) — min_hits=3: starts with {/[, quoted key:, typed value, ends with }/]
         ("json", &[
-            (r#"^\s*[\{\[]"#, 2, 22),
-            (r#""[^"]+"\s*:"#, 2, 22),
-            (r#"[\}\]]\s*$"#, 2, 22),
+            (r#"^\s*[\{\[]"#, 3, 22),
+            (r#""[^"]+"\s*:"#, 3, 22),
+            (r#":\s*(true|false|null|-?[0-9])"#, 3, 22),
+            (r#"[\}\]]\s*$"#, 3, 22),
+            (r#",\s*"[^"]+"#, 3, 22),
         ]),
-        // ── SQL (priority 22) — min_hits=2: DML/DDL keyword + structural keyword
+        // ── SQL (priority 22) — min_hits=2
+        // Pattern 1 uses compound SQL-specific constructs that don't appear in natural language
+        // (prevents false positives from prose containing "delete", "from", "into", etc.)
         ("sql", &[
-            (r"(?i)\b(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE)\b", 2, 22),
-            (r"(?i)\b(FROM|WHERE|JOIN|SET|INTO|VALUES|HAVING|LIMIT|RETURNING|REFERENCES|PRIMARY|FOREIGN|INDEX|CONSTRAINT)\b", 2, 22),
+            (r"(?i)\bSELECT\s+[\w\*\(]|\bDELETE\s+FROM\b|\bINSERT\s+INTO\b|\bUPDATE\s+\w+\s+SET\b|\bCREATE\s+(TABLE|INDEX|VIEW|DATABASE|PROCEDURE|FUNCTION)\b|\bDROP\s+TABLE\b|\bALTER\s+TABLE\b", 2, 22),
+            (r"(?i)\b(FROM|WHERE|JOIN|SET|INTO|VALUES|HAVING|LIMIT|OFFSET|RETURNING)\b", 2, 22),
+            (r"(?i)\b(GROUP\s+BY|ORDER\s+BY|LEFT\s+JOIN|RIGHT\s+JOIN|INNER\s+JOIN|OUTER\s+JOIN|CROSS\s+JOIN)\b", 2, 22),
+            (r"(?i)\b(AND|OR)\s+\w+\s*(=|!=|<>|>|<|>=|<=|\bLIKE\b|\bIN\b|\bIS\b)", 2, 22),
+            (r"--\s*\S|/\*|\b(COUNT|SUM|AVG|MAX|MIN|COALESCE)\s*\(", 2, 22),
         ]),
         // ── Shell (priority 21) — min_hits=2
         ("shell", &[
             (r"(?m)^#!/", 2, 21),
             (r"(?m)^\$\s+\S", 2, 21),
-            (r"\b(apt-get|brew|npm|yarn|pip3?|cargo|git|docker|kubectl|systemctl|chmod|chown|mkdir|grep|awk|curl|wget|rsync)\b", 2, 21),
+            (r"\b(apt-get|brew|npm|yarn|pip3?|cargo|git|docker|kubectl|systemctl|chmod|chown|mkdir|grep|awk|sed|curl|wget|rsync|ssh|scp|tar|xargs)\b", 2, 21),
             (r"\|\s*\w+|\s&&\s|\s\|\|\s|>>\s*\S|\s>\s*\S", 2, 21),
-            (r"(?m)^(sudo |export |source |\. \S|alias |function )", 2, 21),
+            (r"(?m)^(sudo\s|export\s|source\s|\.\s\S|alias\s|function\s)", 2, 21),
+            (r"\$\([^)]+\)", 2, 21),
+            (r"(?m)^\s*[A-Z_][A-Z0-9_]+=", 2, 21),
         ]),
         // ── Code (priority 20) — min_hits=3
         ("code", &[
-            (r"(^|\n)\s*(fn |def |class |function )", 3, 20),
-            (r"\bimport\s+[\w\{]|\brequire\(", 3, 20),
+            (r"(?m)(^|\s)(fn |def |class |function |func |sub )\s*\w", 3, 20),
+            (r"\bimport\s+[\w\{\*]|\brequire\s*\(|\busing\s+\w", 3, 20),
+            (r"\bexport\s+[\w\{]", 3, 20),
             (r"\b(const|let|var)\s+\w+\s*=", 3, 20),
-            (r"\breturn\s+", 3, 20),
-            (r"\bif\s*\(|\bfor\s*\(|\bwhile\s*\(", 3, 20),
+            (r"\breturn\s", 3, 20),
+            (r"\b(if|for|while|switch|match|foreach)\s*\(", 3, 20),
             (r"=>|->", 3, 20),
-            (r"\(\)\s*[{;]|;\s*$", 3, 20),
+            (r"(?m)[{;]\s*$", 3, 20),
+            (r"(?m)^\s*@\w+", 3, 20),
+            (r"(?m)^\s*(public|private|protected|static|async|abstract|override)\s+\w", 3, 20),
         ]),
         // ── Markdown (priority 18) — min_hits=2
         ("markdown", &[
@@ -524,23 +680,24 @@ async fn seed_content_rules(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             (r"\[.+?\]\(.+?\)", 2, 18),
             (r"(?m)^\s*[-*+]\s+\S", 2, 18),
             (r"(?m)^```|^~~~", 2, 18),
-            (r"\*\*[^*\n]+\*\*", 2, 18),
+            (r"\*\*[^*\n]+\*\*|__[^_\n]+__", 2, 18),
             (r"(?m)^>\s", 2, 18),
             (r"(?m)^\d+\.\s+\S", 2, 18),
+            (r"\|.+\|.+\|", 2, 18),
+            (r"(?m)^-{3,}\s*$|^\*{3,}\s*$", 2, 18),
+            (r"!\[.*?\]\(.+?\)", 2, 18),
         ]),
     ];
 
     for (content_type, rules) in groups {
-        let (count,): (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM content_type_rules WHERE content_type = ?1 AND is_builtin = 1",
+        // Always replace builtin rules so improvements ship to existing databases.
+        // User-created rules (is_builtin = 0) are never touched.
+        sqlx::query(
+            "DELETE FROM content_type_rules WHERE content_type = ?1 AND is_builtin = 1",
         )
         .bind(content_type)
-        .fetch_one(pool)
+        .execute(pool)
         .await?;
-
-        if count > 0 {
-            continue; // rules for this type already seeded
-        }
 
         for (pattern, min_hits, priority) in *rules {
             sqlx::query(
@@ -572,6 +729,7 @@ async fn seed_settings(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("active_theme", "midnight"),
         ("page_size", "50"),
         ("language", "en"),
+        ("max_image_size_bytes", "36700160"),
     ];
 
     for (key, value) in defaults {
@@ -601,6 +759,7 @@ async fn seed_content_types(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("sql",      "SQL",      "#f97316"),
         ("shell",    "Shell",    "#10b981"),
         ("markdown", "Markdown", "#64748b"),
+        ("image",    "Image",    "#ec4899"),
     ];
 
     for (name, label, color) in types {
@@ -646,7 +805,9 @@ pub async fn save_entry(
         "SELECT entries.id, entries.content, entries.content_type,
                 COALESCE(cat.name, 'other') AS category,
                 entries.source_app, entries.window_title,
-                {IS_FAVORITE_SQL} AS is_favorite, entries.created_at
+                {IS_FAVORITE_SQL} AS is_favorite, entries.created_at,
+                '' AS collection_ids,
+                entries.alias
          FROM entries
          LEFT JOIN categories cat ON cat.id = entries.category_id
          WHERE entries.id = ?1",
@@ -654,6 +815,168 @@ pub async fn save_entry(
     .bind(id)
     .fetch_one(pool)
     .await
+}
+
+pub async fn update_entry_alias(
+    pool: &SqlitePool,
+    id: i64,
+    alias: Option<String>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE entries SET alias = ?1 WHERE id = ?2")
+        .bind(alias)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_entry_content_type(
+    pool: &SqlitePool,
+    id: i64,
+    content_type: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE entries SET content_type = ?1, manual_override = 1 WHERE id = ?2")
+        .bind(content_type)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+// ── Reclassify ───────────────────────────────────────────────────────────────
+
+#[derive(FromRow)]
+pub struct ReclassifyRow {
+    pub id: i64,
+    pub content: String,
+    pub content_type: String,
+    pub category_id: Option<i64>,
+    pub source_app: Option<String>,
+    pub window_title: Option<String>,
+}
+
+pub async fn get_entries_for_reclassify(
+    pool: &SqlitePool,
+    include_overrides: bool,
+) -> Result<Vec<ReclassifyRow>, sqlx::Error> {
+    let sql = if include_overrides {
+        "SELECT id, content, content_type, category_id, source_app, window_title
+         FROM entries WHERE content_type != 'image'"
+    } else {
+        "SELECT id, content, content_type, category_id, source_app, window_title
+         FROM entries WHERE manual_override = 0 AND content_type != 'image'"
+    };
+    sqlx::query_as::<_, ReclassifyRow>(sql)
+        .fetch_all(pool)
+        .await
+}
+
+pub async fn batch_update_classification(
+    pool: &SqlitePool,
+    updates: &[(i64, &str, Option<i64>)],
+    reset_override: bool,
+) -> Result<u64, sqlx::Error> {
+    let mut count = 0u64;
+    for (id, content_type, category_id) in updates {
+        let sql = if reset_override {
+            "UPDATE entries SET content_type = ?1, category_id = ?2, manual_override = 0 WHERE id = ?3"
+        } else {
+            "UPDATE entries SET content_type = ?1, category_id = ?2 WHERE id = ?3"
+        };
+        sqlx::query(sql)
+            .bind(content_type)
+            .bind(category_id)
+            .bind(id)
+            .execute(pool)
+            .await?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+// ── Collection rules ─────────────────────────────────────────────────────────
+
+pub async fn get_all_collection_rules(pool: &SqlitePool) -> Result<Vec<CollectionRule>, sqlx::Error> {
+    sqlx::query_as::<_, CollectionRule>(
+        "SELECT cr.id, cr.collection_id,
+                COALESCE(c.name, 'unknown') AS collection_name,
+                cr.content_type, cr.source_app, cr.window_title, cr.content_pattern,
+                cr.priority, cr.enabled, cr.is_builtin, cr.created_at
+         FROM collection_rules cr
+         LEFT JOIN collections c ON c.id = cr.collection_id
+         ORDER BY cr.priority DESC, cr.id ASC",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_enabled_collection_rules(pool: &SqlitePool) -> Result<Vec<CollectionRuleRaw>, sqlx::Error> {
+    let rows: Vec<(i64, Option<String>, Option<String>, Option<String>, Option<String>)> =
+        sqlx::query_as(
+            "SELECT collection_id, content_type, source_app, window_title, content_pattern
+             FROM collection_rules
+             WHERE enabled = 1
+             ORDER BY priority DESC, id ASC",
+        )
+        .fetch_all(pool)
+        .await?;
+
+    Ok(rows.into_iter().map(|(collection_id, content_type, source_app, window_title, content_pattern)| {
+        CollectionRuleRaw { collection_id, content_type, source_app, window_title, content_pattern }
+    }).collect())
+}
+
+pub async fn create_collection_rule(
+    pool: &SqlitePool,
+    collection_id: i64,
+    content_type: Option<String>,
+    source_app: Option<String>,
+    window_title: Option<String>,
+    content_pattern: Option<String>,
+    priority: i64,
+) -> Result<i64, sqlx::Error> {
+    let (id,): (i64,) = sqlx::query_as(
+        "INSERT INTO collection_rules (collection_id, content_type, source_app, window_title, content_pattern, priority, is_builtin)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)
+         RETURNING id",
+    )
+    .bind(collection_id)
+    .bind(content_type)
+    .bind(source_app)
+    .bind(window_title)
+    .bind(content_pattern)
+    .bind(priority)
+    .fetch_one(pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn delete_collection_rule(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM collection_rules WHERE id = ?1 AND is_builtin = 0")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn toggle_collection_rule(pool: &SqlitePool, id: i64, enabled: bool) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE collection_rules SET enabled = ?1 WHERE id = ?2")
+        .bind(enabled)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn add_entry_to_collection(pool: &SqlitePool, entry_id: i64, collection_id: i64) -> Result<(), sqlx::Error> {
+    let default_sub = get_default_subcollection_id(pool, collection_id).await?;
+    sqlx::query("INSERT OR IGNORE INTO entry_collections (entry_id, collection_id, subcollection_id) VALUES (?1, ?2, ?3)")
+        .bind(entry_id)
+        .bind(collection_id)
+        .bind(default_sub)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 pub async fn get_context_rules(pool: &SqlitePool) -> Result<Vec<ContextRule>, sqlx::Error> {
@@ -725,6 +1048,76 @@ pub async fn get_themes(pool: &SqlitePool) -> Result<Vec<Theme>, sqlx::Error> {
     )
     .fetch_all(pool)
     .await
+}
+
+pub async fn create_theme(
+    pool: &SqlitePool,
+    slug: &str,
+    name: &str,
+    base: &str,
+    surface: &str,
+    surface_raised: &str,
+    surface_active: &str,
+    stroke: &str,
+    stroke_strong: &str,
+    content: &str,
+    content_2: &str,
+    content_3: &str,
+    accent: &str,
+    accent_text: &str,
+) -> Result<Theme, sqlx::Error> {
+    sqlx::query_as::<_, Theme>(
+        "INSERT INTO themes (slug, name, base, surface, surface_raised, surface_active,
+                             stroke, stroke_strong, content, content_2, content_3,
+                             accent, accent_text, is_builtin)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13, 0)
+         RETURNING slug, name, base, surface, surface_raised, surface_active,
+                   stroke, stroke_strong, content, content_2, content_3,
+                   accent, accent_text, is_builtin",
+    )
+    .bind(slug).bind(name).bind(base).bind(surface)
+    .bind(surface_raised).bind(surface_active).bind(stroke).bind(stroke_strong)
+    .bind(content).bind(content_2).bind(content_3).bind(accent).bind(accent_text)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn update_theme(
+    pool: &SqlitePool,
+    slug: &str,
+    name: &str,
+    base: &str,
+    surface: &str,
+    surface_raised: &str,
+    surface_active: &str,
+    stroke: &str,
+    stroke_strong: &str,
+    content: &str,
+    content_2: &str,
+    content_3: &str,
+    accent: &str,
+    accent_text: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE themes SET name=?2, base=?3, surface=?4, surface_raised=?5, surface_active=?6,
+                stroke=?7, stroke_strong=?8, content=?9, content_2=?10, content_3=?11,
+                accent=?12, accent_text=?13
+         WHERE slug = ?1 AND is_builtin = 0",
+    )
+    .bind(slug).bind(name).bind(base).bind(surface)
+    .bind(surface_raised).bind(surface_active).bind(stroke).bind(stroke_strong)
+    .bind(content).bind(content_2).bind(content_3).bind(accent).bind(accent_text)
+    .execute(pool)
+    .await
+    .map(|_| ())
+}
+
+pub async fn delete_theme(pool: &SqlitePool, slug: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM themes WHERE slug = ?1 AND is_builtin = 0")
+        .bind(slug)
+        .execute(pool)
+        .await
+        .map(|_| ())
 }
 
 pub async fn get_content_types(pool: &SqlitePool) -> Result<Vec<ContentTypeStyle>, sqlx::Error> {
@@ -821,6 +1214,32 @@ pub async fn cleanup_entries(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// Delete image files in `<app_data>/images/` that are no longer referenced by any entry.
+pub async fn cleanup_orphaned_images(
+    app_data_dir: &std::path::Path,
+    pool: &SqlitePool,
+) -> Result<(), sqlx::Error> {
+    let referenced: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT content FROM entries WHERE content_type = 'image'",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let referenced_set: std::collections::HashSet<String> =
+        referenced.into_iter().map(|(c,)| c).collect();
+
+    let images_dir = app_data_dir.join("images");
+    if let Ok(dir) = std::fs::read_dir(&images_dir) {
+        for entry in dir.flatten() {
+            let rel_path = format!("images/{}", entry.file_name().to_string_lossy());
+            if !referenced_set.contains(&rel_path) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+    Ok(())
+}
+
 pub async fn get_category_name_id_map(pool: &SqlitePool) -> Result<HashMap<String, i64>, sqlx::Error> {
     let rows: Vec<(String, i64)> =
         sqlx::query_as("SELECT name, id FROM categories")
@@ -882,7 +1301,7 @@ pub async fn create_collection(
     name: &str,
     color: &str,
 ) -> Result<Collection, sqlx::Error> {
-    sqlx::query_as::<_, Collection>(
+    let col = sqlx::query_as::<_, Collection>(
         "INSERT INTO collections (name, color)
          VALUES (?1, ?2)
          RETURNING id, name, color, is_builtin, created_at",
@@ -890,7 +1309,17 @@ pub async fn create_collection(
     .bind(name)
     .bind(color)
     .fetch_one(pool)
-    .await
+    .await?;
+
+    // Auto-create default subcollection
+    sqlx::query(
+        "INSERT INTO subcollections (collection_id, name, is_default) VALUES (?1, 'Sin clasificar', 1)",
+    )
+    .bind(col.id)
+    .execute(pool)
+    .await?;
+
+    Ok(col)
 }
 
 pub async fn update_collection(
@@ -942,11 +1371,18 @@ pub async fn toggle_favorite(pool: &SqlitePool, entry_id: i64) -> Result<bool, s
         )
         .fetch_one(&mut *tx)
         .await?;
+        let (default_sub,): (i64,) = sqlx::query_as(
+            "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+        )
+        .bind(cid)
+        .fetch_one(&mut *tx)
+        .await?;
         sqlx::query(
-            "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id) VALUES (?1, ?2)",
+            "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id, subcollection_id) VALUES (?1, ?2, ?3)",
         )
         .bind(entry_id)
         .bind(cid)
+        .bind(default_sub)
         .execute(&mut *tx)
         .await?;
         true
@@ -971,6 +1407,7 @@ pub async fn get_entry_collection_ids(
 }
 
 /// Replaces all collection memberships for an entry with the given ids.
+/// New collections get the default subcollection; existing ones preserve their subcollection.
 pub async fn set_entry_collections(
     pool: &SqlitePool,
     entry_id: i64,
@@ -978,17 +1415,41 @@ pub async fn set_entry_collections(
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
+    // Snapshot current subcollection assignments so we can preserve them
+    let existing: Vec<(i64, Option<i64>)> = sqlx::query_as(
+        "SELECT collection_id, subcollection_id FROM entry_collections WHERE entry_id = ?1",
+    )
+    .bind(entry_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let existing_map: std::collections::HashMap<i64, Option<i64>> =
+        existing.into_iter().collect();
+
     sqlx::query("DELETE FROM entry_collections WHERE entry_id = ?1")
         .bind(entry_id)
         .execute(&mut *tx)
         .await?;
 
     for &cid in collection_ids {
+        let sub_id = if let Some(&Some(sid)) = existing_map.get(&cid) {
+            // Preserve existing subcollection assignment
+            sid
+        } else {
+            // Resolve default subcollection for this collection
+            let (sid,): (i64,) = sqlx::query_as(
+                "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+            )
+            .bind(cid)
+            .fetch_one(&mut *tx)
+            .await?;
+            sid
+        };
         sqlx::query(
-            "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id) VALUES (?1, ?2)",
+            "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id, subcollection_id) VALUES (?1, ?2, ?3)",
         )
         .bind(entry_id)
         .bind(cid)
+        .bind(sub_id)
         .execute(&mut *tx)
         .await?;
     }
@@ -1002,6 +1463,156 @@ pub async fn get_collection_counts(pool: &SqlitePool) -> Result<Vec<(i64, i64)>,
     let rows: Vec<(i64, i64)> = sqlx::query_as(
         "SELECT collection_id, COUNT(*) FROM entry_collections GROUP BY collection_id",
     )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+// ── Subcollections ────────────────────────────────────────────────────────────
+
+pub async fn get_all_subcollections(pool: &SqlitePool) -> Result<Vec<Subcollection>, sqlx::Error> {
+    sqlx::query_as::<_, Subcollection>(
+        "SELECT id, collection_id, name, is_default, created_at
+         FROM subcollections
+         ORDER BY is_default DESC, created_at ASC",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_subcollections(pool: &SqlitePool, collection_id: i64) -> Result<Vec<Subcollection>, sqlx::Error> {
+    sqlx::query_as::<_, Subcollection>(
+        "SELECT id, collection_id, name, is_default, created_at
+         FROM subcollections
+         WHERE collection_id = ?1
+         ORDER BY is_default DESC, created_at ASC",
+    )
+    .bind(collection_id)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn create_subcollection(
+    pool: &SqlitePool,
+    collection_id: i64,
+    name: &str,
+) -> Result<Subcollection, sqlx::Error> {
+    sqlx::query_as::<_, Subcollection>(
+        "INSERT INTO subcollections (collection_id, name, is_default)
+         VALUES (?1, ?2, 0)
+         RETURNING id, collection_id, name, is_default, created_at",
+    )
+    .bind(collection_id)
+    .bind(name)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn rename_subcollection(
+    pool: &SqlitePool,
+    id: i64,
+    name: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE subcollections SET name = ?1 WHERE id = ?2 AND is_default = 0")
+        .bind(name)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map(|_| ())
+}
+
+pub async fn delete_subcollection(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    // Fetch the subcollection to guard: must not be default
+    let row: Option<(i64, bool)> = sqlx::query_as(
+        "SELECT collection_id, is_default FROM subcollections WHERE id = ?1",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let (collection_id, is_default) = match row {
+        Some(r) => r,
+        None => return Ok(()),
+    };
+
+    if is_default {
+        return Ok(()); // Cannot delete default subcollection
+    }
+
+    // Move entries to the default subcollection before deleting
+    let (default_id,): (i64,) = sqlx::query_as(
+        "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+    )
+    .bind(collection_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query("UPDATE entry_collections SET subcollection_id = ?1 WHERE subcollection_id = ?2")
+        .bind(default_id)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM subcollections WHERE id = ?1 AND is_default = 0")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn get_default_subcollection_id(pool: &SqlitePool, collection_id: i64) -> Result<i64, sqlx::Error> {
+    let (id,): (i64,) = sqlx::query_as(
+        "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+    )
+    .bind(collection_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn get_subcollection_counts(pool: &SqlitePool, collection_id: i64) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    let rows: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT subcollection_id, COUNT(*) FROM entry_collections
+         WHERE collection_id = ?1 AND subcollection_id IS NOT NULL
+         GROUP BY subcollection_id",
+    )
+    .bind(collection_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn move_entry_subcollection(
+    pool: &SqlitePool,
+    entry_id: i64,
+    collection_id: i64,
+    subcollection_id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE entry_collections SET subcollection_id = ?1
+         WHERE entry_id = ?2 AND collection_id = ?3",
+    )
+    .bind(subcollection_id)
+    .bind(entry_id)
+    .bind(collection_id)
+    .execute(pool)
+    .await
+    .map(|_| ())
+}
+
+/// Returns (collection_id, subcollection_id) pairs for an entry.
+pub async fn get_entry_subcollection_ids(
+    pool: &SqlitePool,
+    entry_id: i64,
+) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    let rows: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT collection_id, COALESCE(subcollection_id, 0) FROM entry_collections WHERE entry_id = ?1",
+    )
+    .bind(entry_id)
     .fetch_all(pool)
     .await?;
     Ok(rows)
@@ -1244,6 +1855,7 @@ pub async fn bootstrap_data(pool: &SqlitePool) -> Result<BootstrapData, sqlx::Er
     let content_types     = get_content_types(pool).await?;
     let collections       = get_collections(pool).await?;
     let collection_counts = get_collection_counts(pool).await?;
+    let subcollections    = get_all_subcollections(pool).await?;
     let languages         = get_languages(pool).await?;
     let entry_counts      = get_entry_counts(pool).await?;
     Ok(BootstrapData {
@@ -1252,6 +1864,7 @@ pub async fn bootstrap_data(pool: &SqlitePool) -> Result<BootstrapData, sqlx::Er
         content_types,
         collections,
         collection_counts,
+        subcollections,
         languages,
         entry_counts,
     })
@@ -1282,4 +1895,285 @@ async fn seed_themes(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         .await?;
     }
     Ok(())
+}
+
+// ── Config Export / Import ──────────────────────────────────────────────────
+
+/// Keys that are machine-specific and should not be exported/imported.
+const SKIP_SETTINGS: &[&str] = &[
+    "window_x", "window_y", "window_width", "window_height", "detail_panel_width",
+];
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct ConfigExport {
+    pub version: u32,
+    pub exported_at: String,
+    pub settings: Vec<ExportSetting>,
+    pub themes: Vec<ExportTheme>,
+    pub categories: Vec<ExportCategory>,
+    pub content_types: Vec<ExportContentType>,
+    pub content_type_rules: Vec<ExportContentTypeRule>,
+    pub context_rules: Vec<ExportContextRule>,
+    pub collections: Vec<ExportCollection>,
+    pub subcollections: Vec<ExportSubcollection>,
+    pub collection_rules: Vec<ExportCollectionRule>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportSetting { pub key: String, pub value: String }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportTheme {
+    pub slug: String, pub name: String,
+    pub base: String, pub surface: String, pub surface_raised: String, pub surface_active: String,
+    pub stroke: String, pub stroke_strong: String, pub content: String, pub content_2: String,
+    pub content_3: String, pub accent: String, pub accent_text: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportCategory { pub name: String, pub color: String }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportContentType { pub name: String, pub label: String, pub color: String }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportContentTypeRule {
+    pub content_type: String, pub pattern: String, pub min_hits: i64, pub priority: i64, pub enabled: bool,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportContextRule {
+    pub category_name: String,
+    pub source_app_pattern: Option<String>, pub window_title_pattern: Option<String>,
+    pub priority: i64, pub enabled: bool,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportCollection { pub name: String, pub color: String }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportSubcollection { pub collection_name: String, pub name: String, pub is_default: bool }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportCollectionRule {
+    pub collection_name: String,
+    pub content_type: Option<String>, pub source_app: Option<String>,
+    pub window_title: Option<String>, pub content_pattern: Option<String>,
+    pub priority: i64, pub enabled: bool,
+}
+
+#[derive(Debug, serde::Serialize, Default)]
+pub struct ImportSummary {
+    pub settings: u32,
+    pub themes: u32,
+    pub categories: u32,
+    pub content_types: u32,
+    pub content_type_rules: u32,
+    pub context_rules: u32,
+    pub collections: u32,
+    pub subcollections: u32,
+    pub collection_rules: u32,
+}
+
+pub async fn export_config(pool: &SqlitePool) -> Result<ConfigExport, sqlx::Error> {
+    let settings = sqlx::query_as::<_, ExportSetting>(
+        "SELECT key, value FROM settings"
+    ).fetch_all(pool).await?
+        .into_iter()
+        .filter(|s| !SKIP_SETTINGS.contains(&s.key.as_str()))
+        .collect();
+
+    let themes = sqlx::query_as::<_, ExportTheme>(
+        "SELECT slug, name, base, surface, surface_raised, surface_active, stroke, stroke_strong,
+                content, content_2, content_3, accent, accent_text
+         FROM themes WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let categories = sqlx::query_as::<_, ExportCategory>(
+        "SELECT name, color FROM categories WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let content_types = sqlx::query_as::<_, ExportContentType>(
+        "SELECT name, label, color FROM content_types WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let content_type_rules = sqlx::query_as::<_, ExportContentTypeRule>(
+        "SELECT content_type, pattern, min_hits, priority, enabled
+         FROM content_type_rules WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let context_rules = sqlx::query_as::<_, ExportContextRule>(
+        "SELECT COALESCE(c.name, '') AS category_name, r.source_app_pattern, r.window_title_pattern,
+                r.priority, r.enabled
+         FROM context_rules r LEFT JOIN categories c ON c.id = r.category_id
+         WHERE r.is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let collections = sqlx::query_as::<_, ExportCollection>(
+        "SELECT name, color FROM collections WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let subcollections = sqlx::query_as::<_, ExportSubcollection>(
+        "SELECT c.name AS collection_name, s.name, s.is_default
+         FROM subcollections s JOIN collections c ON c.id = s.collection_id
+         WHERE c.is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let collection_rules = sqlx::query_as::<_, ExportCollectionRule>(
+        "SELECT c.name AS collection_name, r.content_type, r.source_app, r.window_title,
+                r.content_pattern, r.priority, r.enabled
+         FROM collection_rules r JOIN collections c ON c.id = r.collection_id
+         WHERE r.is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    Ok(ConfigExport {
+        version: 1,
+        exported_at: sqlx::query_scalar::<_, String>("SELECT datetime('now')")
+            .fetch_one(pool).await.unwrap_or_default(),
+        settings, themes, categories, content_types, content_type_rules,
+        context_rules, collections, subcollections, collection_rules,
+    })
+}
+
+pub async fn import_config(pool: &SqlitePool, config: &ConfigExport) -> Result<ImportSummary, sqlx::Error> {
+    let mut summary = ImportSummary::default();
+    let mut tx = pool.begin().await?;
+
+    // 1. Settings — upsert, skip machine-specific
+    for s in &config.settings {
+        if SKIP_SETTINGS.contains(&s.key.as_str()) { continue; }
+        let res = sqlx::query(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = datetime('now')"
+        ).bind(&s.key).bind(&s.value).execute(&mut *tx).await?;
+        if res.rows_affected() > 0 { summary.settings += 1; }
+    }
+
+    // 2. Themes — skip existing slugs
+    for t in &config.themes {
+        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM themes WHERE slug = ?1")
+            .bind(&t.slug).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO themes (slug, name, base, surface, surface_raised, surface_active,
+             stroke, stroke_strong, content, content_2, content_3, accent, accent_text, is_builtin)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13, 0)"
+        ).bind(&t.slug).bind(&t.name).bind(&t.base).bind(&t.surface)
+         .bind(&t.surface_raised).bind(&t.surface_active).bind(&t.stroke).bind(&t.stroke_strong)
+         .bind(&t.content).bind(&t.content_2).bind(&t.content_3).bind(&t.accent).bind(&t.accent_text)
+         .execute(&mut *tx).await?;
+        summary.themes += 1;
+    }
+
+    // 3. Categories — skip existing names
+    for c in &config.categories {
+        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM categories WHERE name = ?1")
+            .bind(&c.name).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query("INSERT INTO categories (name, color, is_builtin) VALUES (?1, ?2, 0)")
+            .bind(&c.name).bind(&c.color).execute(&mut *tx).await?;
+        summary.categories += 1;
+    }
+
+    // 4. Content types — skip existing names
+    for ct in &config.content_types {
+        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM content_types WHERE name = ?1")
+            .bind(&ct.name).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query("INSERT INTO content_types (name, label, color, is_builtin) VALUES (?1, ?2, ?3, 0)")
+            .bind(&ct.name).bind(&ct.label).bind(&ct.color).execute(&mut *tx).await?;
+        summary.content_types += 1;
+    }
+
+    // 5. Content type rules — skip if (content_type, pattern) already exists
+    for r in &config.content_type_rules {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT COUNT(*) > 0 FROM content_type_rules WHERE content_type = ?1 AND pattern = ?2"
+        ).bind(&r.content_type).bind(&r.pattern).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO content_type_rules (content_type, pattern, min_hits, priority, enabled, is_builtin)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0)"
+        ).bind(&r.content_type).bind(&r.pattern).bind(r.min_hits).bind(r.priority).bind(r.enabled)
+         .execute(&mut *tx).await?;
+        summary.content_type_rules += 1;
+    }
+
+    // 6. Context rules — resolve category_name to id
+    let cat_map: HashMap<String, i64> = sqlx::query_as::<_, (String, i64)>(
+        "SELECT name, id FROM categories"
+    ).fetch_all(&mut *tx).await?.into_iter().collect();
+
+    for r in &config.context_rules {
+        let cat_id = cat_map.get(&r.category_name).copied();
+        if cat_id.is_none() && !r.category_name.is_empty() { continue; }
+        let exists: bool = sqlx::query_scalar(
+            "SELECT COUNT(*) > 0 FROM context_rules
+             WHERE COALESCE(category_id, -1) = COALESCE(?1, -1)
+               AND COALESCE(source_app_pattern, '') = COALESCE(?2, '')
+               AND COALESCE(window_title_pattern, '') = COALESCE(?3, '')"
+        ).bind(cat_id).bind(&r.source_app_pattern).bind(&r.window_title_pattern)
+         .fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO context_rules (category_id, source_app_pattern, window_title_pattern, priority, enabled, is_builtin)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0)"
+        ).bind(cat_id).bind(&r.source_app_pattern).bind(&r.window_title_pattern)
+         .bind(r.priority).bind(r.enabled).execute(&mut *tx).await?;
+        summary.context_rules += 1;
+    }
+
+    // 7. Collections — skip existing names
+    for c in &config.collections {
+        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM collections WHERE name = ?1")
+            .bind(&c.name).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query("INSERT INTO collections (name, color, is_builtin) VALUES (?1, ?2, 0)")
+            .bind(&c.name).bind(&c.color).execute(&mut *tx).await?;
+        summary.collections += 1;
+    }
+
+    // Build collection name→id map (including pre-existing)
+    let col_map: HashMap<String, i64> = sqlx::query_as::<_, (String, i64)>(
+        "SELECT name, id FROM collections"
+    ).fetch_all(&mut *tx).await?.into_iter().collect();
+
+    // 8. Subcollections — resolve collection_name, skip duplicates
+    for s in &config.subcollections {
+        let Some(&col_id) = col_map.get(&s.collection_name) else { continue; };
+        let exists: bool = sqlx::query_scalar(
+            "SELECT COUNT(*) > 0 FROM subcollections WHERE collection_id = ?1 AND name = ?2"
+        ).bind(col_id).bind(&s.name).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO subcollections (collection_id, name, is_default) VALUES (?1, ?2, ?3)"
+        ).bind(col_id).bind(&s.name).bind(s.is_default).execute(&mut *tx).await?;
+        summary.subcollections += 1;
+    }
+
+    // 9. Collection rules — resolve collection_name, skip duplicates
+    for r in &config.collection_rules {
+        let Some(&col_id) = col_map.get(&r.collection_name) else { continue; };
+        let exists: bool = sqlx::query_scalar(
+            "SELECT COUNT(*) > 0 FROM collection_rules
+             WHERE collection_id = ?1
+               AND COALESCE(content_type, '') = COALESCE(?2, '')
+               AND COALESCE(source_app, '') = COALESCE(?3, '')
+               AND COALESCE(window_title, '') = COALESCE(?4, '')
+               AND COALESCE(content_pattern, '') = COALESCE(?5, '')"
+        ).bind(col_id).bind(&r.content_type).bind(&r.source_app)
+         .bind(&r.window_title).bind(&r.content_pattern)
+         .fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO collection_rules (collection_id, content_type, source_app, window_title, content_pattern, priority, enabled, is_builtin)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)"
+        ).bind(col_id).bind(&r.content_type).bind(&r.source_app).bind(&r.window_title)
+         .bind(&r.content_pattern).bind(r.priority).bind(r.enabled)
+         .execute(&mut *tx).await?;
+        summary.collection_rules += 1;
+    }
+
+    tx.commit().await?;
+    Ok(summary)
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import type { ClipboardEntry, Collection } from "../types";
+import type { ClipboardEntry, Collection, ContentTypeStyle, Subcollection } from "../types";
 import { ContentRenderer } from "./ContentRenderer";
 import { CollectionSelector } from "./CollectionSelector";
 import { timeAgo } from "../utils/time";
@@ -9,22 +9,29 @@ import { timeAgo } from "../utils/time";
 interface Props {
   entry: ClipboardEntry;
   collections: Collection[];
+  subcollections: Subcollection[];
+  contentTypes: ContentTypeStyle[];
   colorFor: (name: string) => string;
-  labelFor: (name: string) => string;
   onClose: () => void;
-  onCollectionChanged?: () => void;
+  onCollectionChanged?: (entryId: number, collectionIds: number[]) => void;
+  onAliasChanged?: (entryId: number, alias: string | null) => void;
+  onContentTypeChanged?: (entryId: number, contentType: string) => void;
 }
 
-async function copyEntry(content: string) {
+async function copyEntry(entry: ClipboardEntry) {
   try {
-    await invoke("copy_to_clipboard", { content });
+    if (entry.content_type === "image") {
+      await invoke("copy_image_to_clipboard", { path: entry.content });
+    } else {
+      await invoke("copy_to_clipboard", { content: entry.content });
+    }
   } catch (e) {
     console.error("[DetailPanel] copy failed:", e);
   }
 }
 
-export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, onCollectionChanged }: Props) {
-  const { t } = useTranslation();
+export function DetailPanel({ entry, collections, subcollections, contentTypes, colorFor, onClose, onCollectionChanged, onAliasChanged, onContentTypeChanged }: Props) {
+  const { t, i18n } = useTranslation();
   const color = colorFor(entry.content_type);
   const contentRef = useRef<HTMLDivElement>(null);
   const [selectionTooltip, setSelectionTooltip] = useState<{
@@ -34,12 +41,34 @@ export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, o
     below: boolean;
   } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [editingAlias, setEditingAlias] = useState(false);
+  const [aliasValue, setAliasValue] = useState(entry.alias ?? "");
+  const aliasInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setSelectionTooltip(null);
-  }, [entry.id]);
+    setEditingAlias(false);
+    setAliasValue(entry.alias ?? "");
+  }, [entry.id, entry.alias]);
+
+  useEffect(() => {
+    if (editingAlias) aliasInputRef.current?.focus();
+  }, [editingAlias]);
+
+  async function saveAlias() {
+    const trimmed = aliasValue.trim() || null;
+    setEditingAlias(false);
+    if (trimmed === (entry.alias ?? null)) return; // no change
+    try {
+      await invoke("update_entry_alias", { id: entry.id, alias: trimmed });
+      onAliasChanged?.(entry.id, trimmed);
+    } catch (e) {
+      console.error("[DetailPanel] alias save failed:", e);
+    }
+  }
 
   function handleMouseUp(e: React.MouseEvent) {
+    if (entry.content_type === "image") return;
     const selection = window.getSelection();
     const text = selection?.toString().trim() ?? "";
     if (!text || !selection || selection.rangeCount === 0) {
@@ -75,16 +104,77 @@ export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, o
   return (
     <div className="flex flex-col w-full h-full border-l border-stroke bg-base overflow-hidden">
       {/* Panel header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-stroke shrink-0">
-        <span
-          className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+      <div className="flex items-center justify-between px-3 py-2 border-b border-stroke shrink-0 gap-2">
+        <select
+          value={entry.content_type}
+          onChange={async (e) => {
+            const newType = e.target.value;
+            if (newType === entry.content_type) return;
+            try {
+              await invoke("update_entry_content_type", { id: entry.id, contentType: newType });
+              onContentTypeChanged?.(entry.id, newType);
+            } catch (err) {
+              console.error("[DetailPanel] content type update failed:", err);
+            }
+          }}
+          title={t("detail.change_type")}
+          className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide shrink-0 cursor-pointer appearance-none border-none outline-none"
           style={{ backgroundColor: color + "26", color }}
         >
-          {labelFor(entry.content_type)}
-        </span>
-        <div className="flex items-center gap-1">
+          {contentTypes.map((ct) => (
+            <option key={ct.name} value={ct.name}>
+              {ct.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Alias field */}
+        {editingAlias ? (
+          <input
+            ref={aliasInputRef}
+            value={aliasValue}
+            onChange={(e) => setAliasValue(e.target.value)}
+            onBlur={saveAlias}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveAlias();
+              if (e.key === "Escape") { setEditingAlias(false); setAliasValue(entry.alias ?? ""); }
+            }}
+            placeholder={t("detail.alias_placeholder")}
+            className="flex-1 min-w-0 bg-surface-raised border border-accent/40 rounded px-2 py-0.5 text-xs text-content outline-none focus:border-accent"
+          />
+        ) : (
           <button
-            onClick={() => copyEntry(entry.content)}
+            onClick={() => setEditingAlias(true)}
+            className="flex-1 min-w-0 text-left truncate"
+            title={t("detail.alias_edit")}
+          >
+            {entry.alias ? (
+              <span className="text-xs font-medium text-content truncate">{entry.alias}</span>
+            ) : (
+              <span className="text-[11px] text-content-3 hover:text-content-2 transition-colors">{t("detail.alias_add")}</span>
+            )}
+          </button>
+        )}
+
+        {entry.alias && !editingAlias && (
+          <button
+            onClick={async () => {
+              await invoke("update_entry_alias", { id: entry.id, alias: null });
+              onAliasChanged?.(entry.id, null);
+              setAliasValue("");
+            }}
+            className="shrink-0 p-0.5 rounded text-content-3 hover:text-danger transition-colors"
+            title={t("detail.alias_clear")}
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => copyEntry(entry)}
             className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-content-2 hover:text-content hover:bg-surface-raised transition-colors"
             title={t("detail.copy_title")}
           >
@@ -156,11 +246,12 @@ export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, o
             <CollectionSelector
               entryId={entry.id}
               collections={collections}
-              onChanged={onCollectionChanged}
+              subcollections={subcollections}
+              onChanged={(ids) => onCollectionChanged?.(entry.id, ids)}
             />
           </div>
         )}
-        <MetaRow label={t("detail.when")} value={timeAgo(entry.created_at, t)} />
+        <MetaRow label={t("detail.when")} value={timeAgo(entry.created_at, t, i18n.language)} />
         {entry.source_app && <MetaRow label={t("detail.app")} value={entry.source_app} />}
         {entry.window_title && (
           <MetaRow label={t("detail.window")} value={entry.window_title} truncate />

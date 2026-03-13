@@ -1,21 +1,51 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import type { ClipboardEntry } from "../types";
+import type { ClipboardEntry, Collection } from "../types";
 import { timeAgo } from "../utils/time";
+
+// Module-level cache for image thumbnails to avoid refetching on scroll
+const imageCache = new Map<string, string>();
 
 interface Props {
   entry: ClipboardEntry;
+  collections: Collection[];
   isSelected: boolean;
   onSelect: (entry: ClipboardEntry) => void;
   onDelete: (id: number) => void;
   onToggleFavorite: (id: number) => void;
-  onCopy: (content: string) => void;
+  onCopy: (entry: ClipboardEntry) => void;
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
 }
 
+function ImageThumbnail({ path }: { path: string }) {
+  const [src, setSrc] = useState<string | null>(() => imageCache.get(path) ?? null);
+
+  useEffect(() => {
+    if (src) return; // already cached
+    invoke<string>("get_image_base64", { path }).then((data) => {
+      imageCache.set(path, data);
+      setSrc(data);
+    }).catch(() => {});
+  }, [path, src]);
+
+  if (!src) {
+    return <div className="w-12 h-10 rounded bg-surface-raised animate-pulse" />;
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      className="h-10 max-w-30 rounded object-cover border border-stroke"
+      draggable={false}
+    />
+  );
+}
+
 export const EntryItem = memo(function EntryItem({
   entry,
+  collections,
   isSelected,
   onSelect,
   onDelete,
@@ -25,11 +55,18 @@ export const EntryItem = memo(function EntryItem({
   labelFor,
 }: Props) {
   const color = colorFor(entry.content_type);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+
+  const collectionChips = entry.collection_ids
+    ? entry.collection_ids.split(",").map(Number).flatMap((id) => {
+        const col = collections.find((c) => c.id === id);
+        return col ? [col] : [];
+      })
+    : [];
 
   return (
     <div
-      className={`group flex items-start gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+      className={`group relative flex items-start gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
         isSelected ? "bg-surface-active" : "hover:bg-surface-raised"
       }`}
       onClick={() => onSelect(entry)}
@@ -44,25 +81,49 @@ export const EntryItem = memo(function EntryItem({
 
       {/* Content preview */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-content leading-snug font-mono line-clamp-2">
-          {entry.content.replaceAll("\n", " ↵ ")}
-        </p>
+        {entry.content_type === "image" ? (
+          <ImageThumbnail path={entry.content} />
+        ) : (
+          <>
+            {entry.alias && (
+              <p className="text-sm text-content font-medium leading-snug truncate">
+                {entry.alias}
+              </p>
+            )}
+            <p className={`text-sm leading-snug font-mono line-clamp-2 ${entry.alias ? "text-content-3" : "text-content"}`}>
+              {entry.content.replaceAll("\n", " ↵ ")}
+            </p>
+          </>
+        )}
         <div className="flex items-center gap-2 mt-0.5">
           {entry.source_app && (
             <span className="text-[10px] text-content-2">{entry.source_app}</span>
           )}
-          <span className="text-[10px] text-content-3">{timeAgo(entry.created_at, t)}</span>
+          <span className="text-[10px] text-content-3">{timeAgo(entry.created_at, t, i18n.language)}</span>
         </div>
+        {collectionChips.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {collectionChips.map((col) => (
+              <span
+                key={col.id}
+                className="rounded px-1.5 py-0.5 text-[9px] font-medium"
+                style={{ backgroundColor: col.color + "26", color: col.color }}
+              >
+                {col.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Actions — visible on hover or when selected */}
+      {/* Actions — overlay on hover or when selected */}
       <div
-        className={`flex items-center gap-0.5 shrink-0 transition-opacity ${
+        className={`absolute right-2 top-2 flex items-center gap-0.5 rounded-md bg-surface-raised/90 backdrop-blur-sm border border-stroke px-0.5 py-0.5 shadow-sm transition-opacity ${
           isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
       >
         <button
-          onClick={(e) => { e.stopPropagation(); onCopy(entry.content); }}
+          onClick={(e) => { e.stopPropagation(); onCopy(entry); }}
           className="p-1 rounded hover:bg-surface-raised text-content-2 hover:text-accent-text transition-colors"
           title={t("entry.copy")}
         >

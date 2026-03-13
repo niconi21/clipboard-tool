@@ -1,12 +1,12 @@
 use regex::Regex;
-use tauri::State;
+use tauri::{Manager, State};
 
-use crate::audit::AuditLog;
+use crate::audit::{AppLog, AuditLog};
 use crate::categorizer::RulesCache;
-use crate::clipboard::AppCopiedContent;
+use crate::clipboard::{AppCopiedContent, AppCopiedImageHash};
 use crate::db::{
-    BootstrapData, Category, ClipboardEntry, Collection, ContentRule, ContentTypeStyle, ContextRule, DbState,
-    Language, Setting, Theme,
+    BootstrapData, Category, ClipboardEntry, Collection, ContentRule, ContentTypeStyle,
+    ContextRule, DbState, ImportSummary, Language, Setting, Subcollection, Theme,
 };
 
 // ── Error sanitization ────────────────────────────────────────────────────────
@@ -90,6 +90,7 @@ pub async fn get_entries(
     window_title: Option<String>,
     favorite_only: Option<bool>,
     collection_id: Option<i64>,
+    subcollection_id: Option<i64>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<ClipboardEntry>, String> {
@@ -100,7 +101,7 @@ pub async fn get_entries(
 
     if let Some(q) = search.as_deref().filter(|s| !s.is_empty()) {
         let i = params.len() + 1;
-        conditions.push(format!("(entries.content LIKE ?{i} OR entries.window_title LIKE ?{i})"));
+        conditions.push(format!("(entries.content LIKE ?{i} OR entries.window_title LIKE ?{i} OR entries.alias LIKE ?{i})"));
         params.push(format!("%{}%", q));
     }
     if let Some(app) = source_app.as_deref().filter(|s| !s.is_empty()) {
@@ -132,11 +133,21 @@ pub async fn get_entries(
         );
     }
     if let Some(cid) = collection_id {
-        conditions.push(format!(
-            "entries.id IN (SELECT entry_id FROM entry_collections WHERE collection_id = ?{})",
-            params.len() + 1
-        ));
-        params.push(cid.to_string());
+        if let Some(sid) = subcollection_id {
+            conditions.push(format!(
+                "entries.id IN (SELECT entry_id FROM entry_collections WHERE collection_id = ?{} AND subcollection_id = ?{})",
+                params.len() + 1,
+                params.len() + 2
+            ));
+            params.push(cid.to_string());
+            params.push(sid.to_string());
+        } else {
+            conditions.push(format!(
+                "entries.id IN (SELECT entry_id FROM entry_collections WHERE collection_id = ?{})",
+                params.len() + 1
+            ));
+            params.push(cid.to_string());
+        }
     }
 
     let where_clause = if conditions.is_empty() {
@@ -157,10 +168,14 @@ pub async fn get_entries(
         "SELECT entries.id, entries.content, entries.content_type,
                 COALESCE(cat.name, 'other') AS category,
                 entries.source_app, entries.window_title,
-                {is_fav} AS is_favorite, entries.created_at
+                {is_fav} AS is_favorite, entries.created_at,
+                COALESCE(GROUP_CONCAT(DISTINCT ec_all.collection_id), '') AS collection_ids,
+                entries.alias
          FROM entries
          LEFT JOIN categories cat ON cat.id = entries.category_id
+         LEFT JOIN entry_collections ec_all ON ec_all.entry_id = entries.id
          {where_clause}
+         GROUP BY entries.id
          ORDER BY entries.created_at DESC
          LIMIT ?{limit_idx} OFFSET ?{offset_idx}",
         is_fav = crate::db::IS_FAVORITE_SQL,
@@ -175,12 +190,157 @@ pub async fn get_entries(
 }
 
 #[tauri::command]
+pub async fn update_entry_alias(
+    state: State<'_, DbState>,
+    id: i64,
+    alias: Option<String>,
+) -> Result<(), String> {
+    let alias = alias.and_then(|s| {
+        let trimmed = s.trim().to_string();
+        if trimmed.is_empty() { None } else { Some(trimmed) }
+    });
+    crate::db::update_entry_alias(&state.0, id, alias)
+        .await
+        .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn update_entry_content_type(
+    state: State<'_, DbState>,
+    id: i64,
+    content_type: String,
+) -> Result<(), String> {
+    validate_name(&content_type)?;
+    crate::db::update_entry_content_type(&state.0, id, &content_type)
+        .await
+        .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn reclassify_entries(
+    state: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    app_log: State<'_, AppLog>,
+    include_overrides: bool,
+) -> Result<u64, String> {
+    cache.refresh(&state.0).await;
+    let rows = crate::db::get_entries_for_reclassify(&state.0, include_overrides)
+        .await
+        .map_err(db_err)?;
+
+    let mut updates: Vec<(i64, String, Option<i64>)> = Vec::new();
+    for row in &rows {
+        let result = cache.classify(
+            &row.content,
+            row.source_app.as_deref(),
+            row.window_title.as_deref(),
+        );
+        if result.content_type != row.content_type || result.category_id != row.category_id {
+            updates.push((row.id, result.content_type, result.category_id));
+        }
+    }
+
+    let refs: Vec<(i64, &str, Option<i64>)> = updates
+        .iter()
+        .map(|(id, ct, cat)| (*id, ct.as_str(), *cat))
+        .collect();
+
+    let count = crate::db::batch_update_classification(&state.0, &refs, include_overrides)
+        .await
+        .map_err(db_err)?;
+
+    app_log.info("reclassify", &format!("reclassified {count} entries (include_overrides={include_overrides})"));
+    Ok(count)
+}
+
+#[tauri::command]
 pub async fn delete_entry(
+    app: tauri::AppHandle,
     state: State<'_, DbState>,
     audit: State<'_, AuditLog>,
     id: i64,
+    collection_id: Option<i64>,
+    subcollection_id: Option<i64>,
 ) -> Result<(), String> {
-    // Prevent deleting an entry that belongs to one or more collections
+    // Context-aware deletion:
+    // - subcollection_id set → move entry to default subcollection
+    // - collection_id set (no subcollection_id) → unlink entry from that collection
+    // - neither set → permanent delete (cascade removes associations)
+
+    if let Some(sub_id) = subcollection_id {
+        let col_id = collection_id.ok_or("collection_id required with subcollection_id")?;
+        // Move to default subcollection
+        let default_sub: Option<(i64,)> = sqlx::query_as(
+            "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+        )
+        .bind(col_id)
+        .fetch_optional(&state.0)
+        .await
+        .map_err(db_err)?;
+        let default_id = default_sub.ok_or("No default subcollection found")?.0;
+        if default_id != sub_id {
+            sqlx::query(
+                "UPDATE entry_collections SET subcollection_id = ?1 \
+                 WHERE entry_id = ?2 AND collection_id = ?3",
+            )
+            .bind(default_id)
+            .bind(id)
+            .bind(col_id)
+            .execute(&state.0)
+            .await
+            .map_err(db_err)?;
+        }
+        audit.log("entry_moved_to_default_sub", serde_json::json!({ "entry_id": id, "collection_id": col_id }));
+        return Ok(());
+    }
+
+    if let Some(col_id) = collection_id {
+        // Block if entry is in a non-default subcollection
+        let in_sub: Option<(Option<i64>,)> = sqlx::query_as(
+            "SELECT ec.subcollection_id FROM entry_collections ec \
+             WHERE ec.entry_id = ?1 AND ec.collection_id = ?2",
+        )
+        .bind(id)
+        .bind(col_id)
+        .fetch_optional(&state.0)
+        .await
+        .map_err(db_err)?;
+
+        if let Some((Some(sub_id),)) = in_sub {
+            let is_default: Option<(bool,)> = sqlx::query_as(
+                "SELECT is_default FROM subcollections WHERE id = ?1",
+            )
+            .bind(sub_id)
+            .fetch_optional(&state.0)
+            .await
+            .map_err(db_err)?;
+            if !is_default.map(|(d,)| d).unwrap_or(true) {
+                let sub_name: Option<(String,)> = sqlx::query_as(
+                    "SELECT name FROM subcollections WHERE id = ?1",
+                )
+                .bind(sub_id)
+                .fetch_optional(&state.0)
+                .await
+                .map_err(db_err)?;
+                let name = sub_name.map(|(n,)| n).unwrap_or_default();
+                return Err(format!("ENTRY_IN_SUBCOLLECTION:{}", name));
+            }
+        }
+
+        // Unlink entry from collection (keep the entry itself)
+        sqlx::query(
+            "DELETE FROM entry_collections WHERE entry_id = ?1 AND collection_id = ?2",
+        )
+        .bind(id)
+        .bind(col_id)
+        .execute(&state.0)
+        .await
+        .map_err(db_err)?;
+        audit.log("entry_unlinked", serde_json::json!({ "entry_id": id, "collection_id": col_id }));
+        return Ok(());
+    }
+
+    // Permanent delete — only allowed if entry has no collection associations
     let collection_names: Vec<(String,)> = sqlx::query_as(
         "SELECT c.name FROM collections c \
          JOIN entry_collections ec ON ec.collection_id = c.id \
@@ -192,11 +352,18 @@ pub async fn delete_entry(
     .map_err(db_err)?;
 
     if !collection_names.is_empty() {
-        // Return a parseable error code so the frontend can translate it.
-        // Format: "ENTRY_IN_COLLECTION:<comma-separated names>"
         let names: Vec<&str> = collection_names.iter().map(|(n,)| n.as_str()).collect();
         return Err(format!("ENTRY_IN_COLLECTION:{}", names.join(",")));
     }
+
+    // Fetch entry info before deletion for image cleanup
+    let entry_info: Option<(String, String)> = sqlx::query_as(
+        "SELECT content, content_type FROM entries WHERE id = ?1",
+    )
+    .bind(id)
+    .fetch_optional(&state.0)
+    .await
+    .map_err(db_err)?;
 
     sqlx::query("DELETE FROM entries WHERE id = ?1")
         .bind(id)
@@ -205,7 +372,28 @@ pub async fn delete_entry(
         .map(|_| {
             audit.log("entry_deleted", serde_json::json!({ "id": id }));
         })
-        .map_err(db_err)
+        .map_err(db_err)?;
+
+    // Clean up orphaned image file
+    if let Some((content, content_type)) = entry_info {
+        if content_type == "image" {
+            let still_used: (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM entries WHERE content = ?1",
+            )
+            .bind(&content)
+            .fetch_one(&state.0)
+            .await
+            .map_err(db_err)?;
+
+            if still_used.0 == 0 {
+                if let Ok(data_dir) = app.path().app_data_dir() {
+                    let _ = std::fs::remove_file(data_dir.join(&content));
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -262,6 +450,86 @@ pub async fn set_active_theme(state: State<'_, DbState>, slug: String) -> Result
     crate::db::update_setting(&state.0, "active_theme", &slug)
         .await
         .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn create_theme(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    slug: String,
+    name: String,
+    base: String,
+    surface: String,
+    surface_raised: String,
+    surface_active: String,
+    stroke: String,
+    stroke_strong: String,
+    content: String,
+    content_2: String,
+    content_3: String,
+    accent: String,
+    accent_text: String,
+) -> Result<Theme, String> {
+    validate_name(&name)?;
+    validate_name(&slug)?;
+    for c in [&base, &surface, &surface_raised, &surface_active, &stroke, &stroke_strong,
+              &content, &content_2, &content_3, &accent, &accent_text] {
+        validate_color(c)?;
+    }
+    let theme = crate::db::create_theme(
+        &state.0, &slug, &name, &base, &surface, &surface_raised, &surface_active,
+        &stroke, &stroke_strong, &content, &content_2, &content_3, &accent, &accent_text,
+    )
+    .await
+    .map_err(db_err)?;
+    audit.log("theme_created", serde_json::json!({ "slug": slug }));
+    Ok(theme)
+}
+
+#[tauri::command]
+pub async fn update_theme(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    slug: String,
+    name: String,
+    base: String,
+    surface: String,
+    surface_raised: String,
+    surface_active: String,
+    stroke: String,
+    stroke_strong: String,
+    content: String,
+    content_2: String,
+    content_3: String,
+    accent: String,
+    accent_text: String,
+) -> Result<(), String> {
+    validate_name(&name)?;
+    for c in [&base, &surface, &surface_raised, &surface_active, &stroke, &stroke_strong,
+              &content, &content_2, &content_3, &accent, &accent_text] {
+        validate_color(c)?;
+    }
+    crate::db::update_theme(
+        &state.0, &slug, &name, &base, &surface, &surface_raised, &surface_active,
+        &stroke, &stroke_strong, &content, &content_2, &content_3, &accent, &accent_text,
+    )
+    .await
+    .map_err(db_err)?;
+    audit.log("theme_updated", serde_json::json!({ "slug": slug }));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_theme(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    slug: String,
+) -> Result<(), String> {
+    crate::db::delete_theme(&state.0, &slug)
+        .await
+        .map_err(db_err)?;
+    audit.log("theme_deleted", serde_json::json!({ "slug": slug }));
+    Ok(())
 }
 
 // ── Languages ────────────────────────────────────────────────────────────────
@@ -326,6 +594,7 @@ pub async fn get_settings(state: State<'_, DbState>) -> Result<Vec<Setting>, Str
 
 #[tauri::command]
 pub async fn update_setting(
+    app: tauri::AppHandle,
     db: State<'_, DbState>,
     cache: State<'_, RulesCache>,
     audit: State<'_, AuditLog>,
@@ -342,6 +611,21 @@ pub async fn update_setting(
     const CACHE_KEYS: &[&str] = &["content_analysis_max_bytes"];
     if CACHE_KEYS.contains(&key.as_str()) {
         cache.refresh(&db.0).await;
+    }
+
+    // Update tray menu labels immediately when the language changes
+    if key == "language" {
+        let (lbl_open, lbl_close, lbl_quit) = crate::tray_labels(&value);
+        if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
+            if let Ok(mut open) = tray.open_label.lock() { *open = lbl_open.to_string(); }
+            if let Ok(mut close) = tray.close_label.lock() { *close = lbl_close.to_string(); }
+            let _ = tray.quit.set_text(lbl_quit);
+            // Set toggle label based on current window visibility
+            let visible = app.get_webview_window("main")
+                .and_then(|w| w.is_visible().ok())
+                .unwrap_or(false);
+            let _ = tray.toggle.set_text(if visible { lbl_close } else { lbl_open });
+        }
     }
 
     Ok(())
@@ -424,6 +708,93 @@ pub async fn set_entry_collections(
 #[tauri::command]
 pub async fn get_collection_counts(state: State<'_, DbState>) -> Result<Vec<(i64, i64)>, String> {
     crate::db::get_collection_counts(&state.0).await.map_err(db_err)
+}
+
+// ── Subcollections ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_subcollections(
+    state: State<'_, DbState>,
+    collection_id: i64,
+) -> Result<Vec<Subcollection>, String> {
+    crate::db::get_subcollections(&state.0, collection_id)
+        .await
+        .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn create_subcollection(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    collection_id: i64,
+    name: String,
+) -> Result<Subcollection, String> {
+    audited_validate(&audit, validate_name(&name), "create_subcollection", "name")?;
+    let sub = crate::db::create_subcollection(&state.0, collection_id, &name)
+        .await
+        .map_err(db_err)?;
+    audit.log("subcollection_created", serde_json::json!({ "collection_id": collection_id, "name": name }));
+    Ok(sub)
+}
+
+#[tauri::command]
+pub async fn rename_subcollection(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    id: i64,
+    name: String,
+) -> Result<(), String> {
+    audited_validate(&audit, validate_name(&name), "rename_subcollection", "name")?;
+    crate::db::rename_subcollection(&state.0, id, &name)
+        .await
+        .map_err(db_err)?;
+    audit.log("subcollection_renamed", serde_json::json!({ "id": id, "name": name }));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_subcollection(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    id: i64,
+) -> Result<(), String> {
+    crate::db::delete_subcollection(&state.0, id)
+        .await
+        .map_err(db_err)?;
+    audit.log("subcollection_deleted", serde_json::json!({ "id": id }));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_subcollection_counts(
+    state: State<'_, DbState>,
+    collection_id: i64,
+) -> Result<Vec<(i64, i64)>, String> {
+    crate::db::get_subcollection_counts(&state.0, collection_id)
+        .await
+        .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn move_entry_subcollection(
+    state: State<'_, DbState>,
+    entry_id: i64,
+    collection_id: i64,
+    subcollection_id: i64,
+) -> Result<(), String> {
+    crate::db::move_entry_subcollection(&state.0, entry_id, collection_id, subcollection_id)
+        .await
+        .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn get_entry_subcollection_ids(
+    state: State<'_, DbState>,
+    entry_id: i64,
+) -> Result<Vec<(i64, i64)>, String> {
+    crate::db::get_entry_subcollection_ids(&state.0, entry_id)
+        .await
+        .map_err(db_err)
 }
 
 // ── Content Types CRUD ────────────────────────────────────────────────────────
@@ -653,6 +1024,84 @@ pub async fn set_content_type_rule_enabled(
     Ok(())
 }
 
+// ── Collection rules ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_all_collection_rules(
+    state: State<'_, DbState>,
+) -> Result<Vec<crate::db::CollectionRule>, String> {
+    crate::db::get_all_collection_rules(&state.0).await.map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn create_collection_rule(
+    db: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    audit: State<'_, AuditLog>,
+    collection_id: i64,
+    content_type: Option<String>,
+    source_app: Option<String>,
+    window_title: Option<String>,
+    content_pattern: Option<String>,
+    priority: i64,
+) -> Result<i64, String> {
+    // Validate regex patterns
+    if let Some(ref p) = source_app {
+        audited_validate(&audit, validate_regex_pattern(p), "create_collection_rule", "source_app")?;
+    }
+    if let Some(ref p) = window_title {
+        audited_validate(&audit, validate_regex_pattern(p), "create_collection_rule", "window_title")?;
+    }
+    if let Some(ref p) = content_pattern {
+        audited_validate(&audit, validate_regex_pattern(p), "create_collection_rule", "content_pattern")?;
+    }
+    let id = crate::db::create_collection_rule(
+        &db.0, collection_id, content_type, source_app, window_title, content_pattern, priority,
+    )
+    .await
+    .map_err(db_err)?;
+    cache.refresh(&db.0).await;
+    audit.log(
+        "collection_rule_created",
+        serde_json::json!({ "id": id, "collection_id": collection_id }),
+    );
+    Ok(id)
+}
+
+#[tauri::command]
+pub async fn delete_collection_rule(
+    db: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    audit: State<'_, AuditLog>,
+    id: i64,
+) -> Result<(), String> {
+    crate::db::delete_collection_rule(&db.0, id)
+        .await
+        .map_err(db_err)?;
+    cache.refresh(&db.0).await;
+    audit.log("collection_rule_deleted", serde_json::json!({ "id": id }));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn toggle_collection_rule(
+    db: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    audit: State<'_, AuditLog>,
+    id: i64,
+    enabled: bool,
+) -> Result<(), String> {
+    crate::db::toggle_collection_rule(&db.0, id, enabled)
+        .await
+        .map_err(db_err)?;
+    cache.refresh(&db.0).await;
+    audit.log(
+        "collection_rule_toggled",
+        serde_json::json!({ "id": id, "enabled": enabled }),
+    );
+    Ok(())
+}
+
 // ── Frontend security events ───────────────────────────────────────────────────
 
 /// Called by the frontend to log security-relevant events that originate in the UI.
@@ -674,4 +1123,149 @@ pub fn log_security_event(
 #[tauri::command]
 pub async fn bootstrap(state: State<'_, DbState>) -> Result<BootstrapData, String> {
     crate::db::bootstrap_data(&state.0).await.map_err(db_err)
+}
+
+// ── Window control ─────────────────────────────────────────────────────────────
+
+/// Hide the window and update the tray menu label to the localized "Open".
+/// Used by the custom window controls in the frontend to keep the tray in sync.
+#[tauri::command]
+pub fn hide_window(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_skip_taskbar(true);
+        let _ = window.hide();
+        if let Some(state) = app.try_state::<crate::TrayMenuState>() {
+            let label = state.open_label.lock()
+                .map(|l| l.clone())
+                .unwrap_or_else(|_| "Open".to_string());
+            let _ = state.toggle.set_text(&label);
+        }
+    }
+}
+
+// ── Data path ─────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_data_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+// ── Image commands ───────────────────────────────────────────────────────────
+
+/// Returns a data URI (data:image/png;base64,...) for an image stored on disk.
+#[tauri::command]
+pub async fn get_image_base64(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    if path.contains("..") || !path.starts_with("images/") {
+        return Err("Invalid image path".to_string());
+    }
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let full_path = data_dir.join(&path);
+    let bytes = std::fs::read(&full_path).map_err(|e| format!("Failed to read image: {e}"))?;
+    use base64::Engine;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(&bytes)
+    ))
+}
+
+/// Copy an image back to the system clipboard from its stored PNG file.
+#[tauri::command]
+pub async fn copy_image_to_clipboard(
+    app: tauri::AppHandle,
+    app_copied_hash: State<'_, AppCopiedImageHash>,
+    path: String,
+) -> Result<(), String> {
+    if path.contains("..") || !path.starts_with("images/") {
+        return Err("Invalid image path".to_string());
+    }
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let full_path = data_dir.join(&path);
+
+    let img = image::open(&full_path).map_err(|e| format!("Failed to open image: {e}"))?;
+    let rgba = img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+
+    // Set self-copy prevention hash
+    {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(rgba.as_raw());
+        let hash = format!("{:x}", hasher.finalize());
+        let mut lock = app_copied_hash.0.lock().unwrap();
+        *lock = Some(hash);
+    }
+
+    let img_data = arboard::ImageData {
+        width: w as usize,
+        height: h as usize,
+        bytes: std::borrow::Cow::Owned(rgba.into_raw()),
+    };
+    arboard::Clipboard::new()
+        .and_then(|mut cb| cb.set_image(img_data))
+        .map_err(|e| e.to_string())
+}
+
+// ── Config Export / Import ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn export_config(
+    app: tauri::AppHandle,
+    state: State<'_, DbState>,
+    app_log: State<'_, AppLog>,
+) -> Result<String, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let config = crate::db::export_config(&state.0).await.map_err(db_err)?;
+    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+
+    let path = app.dialog()
+        .file()
+        .set_file_name("clipboard-tool-config.json")
+        .add_filter("JSON", &["json"])
+        .blocking_save_file();
+
+    let Some(path) = path else {
+        return Ok(String::new());
+    };
+
+    let file_path = path.as_path().ok_or("Invalid file path")?;
+    std::fs::write(file_path, &json).map_err(|e| e.to_string())?;
+
+    app_log.info("export_config", &format!("exported to {}", file_path.display()));
+    Ok(file_path.display().to_string())
+}
+
+#[tauri::command]
+pub async fn import_config(
+    app: tauri::AppHandle,
+    state: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    app_log: State<'_, AppLog>,
+) -> Result<ImportSummary, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let path = app.dialog()
+        .file()
+        .add_filter("JSON", &["json"])
+        .blocking_pick_file();
+
+    let Some(path) = path else {
+        return Err("CANCELLED".to_string());
+    };
+
+    let file_path = path.as_path().ok_or("Invalid file path")?;
+    let json = std::fs::read_to_string(file_path).map_err(|e| e.to_string())?;
+    let config: crate::db::ConfigExport = serde_json::from_str(&json)
+        .map_err(|e| format!("Invalid config file: {e}"))?;
+
+    if config.version != 1 {
+        return Err(format!("Unsupported config version: {}", config.version));
+    }
+
+    let summary = crate::db::import_config(&state.0, &config).await.map_err(db_err)?;
+    cache.refresh(&state.0).await;
+
+    app_log.info("import_config", &format!("imported config: {:?}", summary));
+    Ok(summary)
 }

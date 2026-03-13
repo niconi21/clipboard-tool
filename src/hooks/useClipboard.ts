@@ -17,7 +17,7 @@ export const EMPTY_FILTERS: ClipboardFilters = {
   windowTitle: "",
 };
 
-export function useClipboard(search: string, filters: ClipboardFilters, pageSize = 50, favoriteOnly = false, collectionId: number | null = null, enabled = true) {
+export function useClipboard(search: string, filters: ClipboardFilters, pageSize = 50, favoriteOnly = false, collectionId: number | null = null, subcollectionId: number | null = null, enabled = true) {
   const [entries, setEntries] = useState<ClipboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -36,10 +36,11 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
       windowTitle: filters.windowTitle || null,
       favoriteOnly: favoriteOnly || null,
       collectionId: collectionId ?? null,
+      subcollectionId: subcollectionId ?? null,
       limit: pageSize,
       offset,
     });
-  }, [search, filters.contentType, filters.sourceApp, filters.category, filters.windowTitle, favoriteOnly, collectionId, pageSize]);
+  }, [search, filters.contentType, filters.sourceApp, filters.category, filters.windowTitle, favoriteOnly, collectionId, subcollectionId, pageSize]);
 
   // Reset and load first page whenever search/filters change
   const load = useCallback(async () => {
@@ -105,8 +106,12 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
     return () => { cancelled = true; unlistenFn?.(); };
   }, [search, hasActiveFilter, favoriteOnly, collectionId, load, enabled]);
 
-  const removeEntry = useCallback(async (id: number) => {
-    await invoke("delete_entry", { id }); // throws if entry is in a collection
+  const removeEntry = useCallback(async (id: number, collectionId?: number | null, subcollectionId?: number | null) => {
+    await invoke("delete_entry", {
+      id,
+      collectionId: collectionId ?? null,
+      subcollectionId: subcollectionId ?? null,
+    });
     setEntries((prev) => {
       const updated = prev.filter((e) => e.id !== id);
       offsetRef.current = updated.length;
@@ -124,5 +129,23 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
     });
   }, [favoriteOnly]);
 
-  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite };
+  const patchEntryCollections = useCallback((id: number, collectionIds: number[]) => {
+    setEntries((prev) =>
+      prev.map((e) => e.id === id ? { ...e, collection_ids: collectionIds.join(",") } : e)
+    );
+  }, []);
+
+  const patchEntryAlias = useCallback((id: number, alias: string | null) => {
+    setEntries((prev) =>
+      prev.map((e) => e.id === id ? { ...e, alias } : e)
+    );
+  }, []);
+
+  const patchEntryContentType = useCallback((id: number, contentType: string) => {
+    setEntries((prev) =>
+      prev.map((e) => e.id === id ? { ...e, content_type: contentType } : e)
+    );
+  }, []);
+
+  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType };
 }
