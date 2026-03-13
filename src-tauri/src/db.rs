@@ -490,34 +490,46 @@ async fn seed_content_rules(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             (r"^rgba?\(\s*\d+", 1, 25),
             (r"^hsla?\(\s*\d+", 1, 25),
         ]),
-        // ── JSON (priority 22) — min_hits=2: starts with {/[, has "key": pattern, ends with }/]
+        // ── JSON (priority 22) — min_hits=3: starts with {/[, quoted key:, typed value, ends with }/]
         ("json", &[
-            (r#"^\s*[\{\[]"#, 2, 22),
-            (r#""[^"]+"\s*:"#, 2, 22),
-            (r#"[\}\]]\s*$"#, 2, 22),
+            (r#"^\s*[\{\[]"#, 3, 22),
+            (r#""[^"]+"\s*:"#, 3, 22),
+            (r#":\s*(true|false|null|-?[0-9])"#, 3, 22),
+            (r#"[\}\]]\s*$"#, 3, 22),
+            (r#",\s*"[^"]+"#, 3, 22),
         ]),
-        // ── SQL (priority 22) — min_hits=2: DML/DDL keyword + structural keyword
+        // ── SQL (priority 22) — min_hits=2
+        // Pattern 1 uses compound SQL-specific constructs that don't appear in natural language
+        // (prevents false positives from prose containing "delete", "from", "into", etc.)
         ("sql", &[
-            (r"(?i)\b(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE)\b", 2, 22),
-            (r"(?i)\b(FROM|WHERE|JOIN|SET|INTO|VALUES|HAVING|LIMIT|RETURNING|REFERENCES|PRIMARY|FOREIGN|INDEX|CONSTRAINT)\b", 2, 22),
+            (r"(?i)\bSELECT\s+[\w\*\(]|\bDELETE\s+FROM\b|\bINSERT\s+INTO\b|\bUPDATE\s+\w+\s+SET\b|\bCREATE\s+(TABLE|INDEX|VIEW|DATABASE|PROCEDURE|FUNCTION)\b|\bDROP\s+TABLE\b|\bALTER\s+TABLE\b", 2, 22),
+            (r"(?i)\b(FROM|WHERE|JOIN|SET|INTO|VALUES|HAVING|LIMIT|OFFSET|RETURNING)\b", 2, 22),
+            (r"(?i)\b(GROUP\s+BY|ORDER\s+BY|LEFT\s+JOIN|RIGHT\s+JOIN|INNER\s+JOIN|OUTER\s+JOIN|CROSS\s+JOIN)\b", 2, 22),
+            (r"(?i)\b(AND|OR)\s+\w+\s*(=|!=|<>|>|<|>=|<=|\bLIKE\b|\bIN\b|\bIS\b)", 2, 22),
+            (r"--\s*\S|/\*|\b(COUNT|SUM|AVG|MAX|MIN|COALESCE)\s*\(", 2, 22),
         ]),
         // ── Shell (priority 21) — min_hits=2
         ("shell", &[
             (r"(?m)^#!/", 2, 21),
             (r"(?m)^\$\s+\S", 2, 21),
-            (r"\b(apt-get|brew|npm|yarn|pip3?|cargo|git|docker|kubectl|systemctl|chmod|chown|mkdir|grep|awk|curl|wget|rsync)\b", 2, 21),
+            (r"\b(apt-get|brew|npm|yarn|pip3?|cargo|git|docker|kubectl|systemctl|chmod|chown|mkdir|grep|awk|sed|curl|wget|rsync|ssh|scp|tar|xargs)\b", 2, 21),
             (r"\|\s*\w+|\s&&\s|\s\|\|\s|>>\s*\S|\s>\s*\S", 2, 21),
-            (r"(?m)^(sudo |export |source |\. \S|alias |function )", 2, 21),
+            (r"(?m)^(sudo\s|export\s|source\s|\.\s\S|alias\s|function\s)", 2, 21),
+            (r"\$\([^)]+\)", 2, 21),
+            (r"(?m)^\s*[A-Z_][A-Z0-9_]+=", 2, 21),
         ]),
         // ── Code (priority 20) — min_hits=3
         ("code", &[
-            (r"(^|\n)\s*(fn |def |class |function )", 3, 20),
-            (r"\bimport\s+[\w\{]|\brequire\(", 3, 20),
+            (r"(?m)(^|\s)(fn |def |class |function |func |sub )\s*\w", 3, 20),
+            (r"\bimport\s+[\w\{\*]|\brequire\s*\(|\busing\s+\w", 3, 20),
+            (r"\bexport\s+[\w\{]", 3, 20),
             (r"\b(const|let|var)\s+\w+\s*=", 3, 20),
-            (r"\breturn\s+", 3, 20),
-            (r"\bif\s*\(|\bfor\s*\(|\bwhile\s*\(", 3, 20),
+            (r"\breturn\s", 3, 20),
+            (r"\b(if|for|while|switch|match|foreach)\s*\(", 3, 20),
             (r"=>|->", 3, 20),
-            (r"\(\)\s*[{;]|;\s*$", 3, 20),
+            (r"(?m)[{;]\s*$", 3, 20),
+            (r"(?m)^\s*@\w+", 3, 20),
+            (r"(?m)^\s*(public|private|protected|static|async|abstract|override)\s+\w", 3, 20),
         ]),
         // ── Markdown (priority 18) — min_hits=2
         ("markdown", &[
@@ -525,23 +537,24 @@ async fn seed_content_rules(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             (r"\[.+?\]\(.+?\)", 2, 18),
             (r"(?m)^\s*[-*+]\s+\S", 2, 18),
             (r"(?m)^```|^~~~", 2, 18),
-            (r"\*\*[^*\n]+\*\*", 2, 18),
+            (r"\*\*[^*\n]+\*\*|__[^_\n]+__", 2, 18),
             (r"(?m)^>\s", 2, 18),
             (r"(?m)^\d+\.\s+\S", 2, 18),
+            (r"\|.+\|.+\|", 2, 18),
+            (r"(?m)^-{3,}\s*$|^\*{3,}\s*$", 2, 18),
+            (r"!\[.*?\]\(.+?\)", 2, 18),
         ]),
     ];
 
     for (content_type, rules) in groups {
-        let (count,): (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM content_type_rules WHERE content_type = ?1 AND is_builtin = 1",
+        // Always replace builtin rules so improvements ship to existing databases.
+        // User-created rules (is_builtin = 0) are never touched.
+        sqlx::query(
+            "DELETE FROM content_type_rules WHERE content_type = ?1 AND is_builtin = 1",
         )
         .bind(content_type)
-        .fetch_one(pool)
+        .execute(pool)
         .await?;
-
-        if count > 0 {
-            continue; // rules for this type already seeded
-        }
 
         for (pattern, min_hits, priority) in *rules {
             sqlx::query(
