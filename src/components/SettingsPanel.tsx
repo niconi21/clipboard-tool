@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { useTranslation, Trans } from "react-i18next";
 import type { Category, Collection, ContentRule, ContentTypeStyle, ContextRule, Language, Setting, Theme } from "../types";
 import { CollectionsManager } from "./CollectionsManager";
@@ -362,6 +363,8 @@ const BACKEND_DEPS: { name: string; version: string; licenseKey: string; url: st
 
 function AboutTab() {
   const { t } = useTranslation();
+  const [version, setVersion] = useState("");
+  useEffect(() => { getVersion().then(setVersion); }, []);
 
   return (
     <div className="space-y-6">
@@ -373,7 +376,7 @@ function AboutTab() {
             <p className="text-xs text-content-2 mt-0.5">{t("about.description")}</p>
           </div>
           <span className="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/30">
-            v1.0.0
+            {version ? `v${version}` : "…"}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
