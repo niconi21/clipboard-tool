@@ -61,7 +61,7 @@ pub fn start_watcher(app: AppHandle) {
                 .ok()
                 .flatten()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(10_485_760)
+                .unwrap_or(36_700_160)
         });
 
         loop {

@@ -108,7 +108,7 @@ export function SettingsPanel({
   }
 
   const maxBytes = getSetting("content_analysis_max_bytes", "8192");
-  const maxImageBytes = getSetting("max_image_size_bytes", "10485760");
+  const maxImageBytes = getSetting("max_image_size_bytes", "36700160");
   const pageSize = getSetting("page_size", "50");
   const maxEntries = getSetting("max_history_entries", "0");
   const retentionDays = getSetting("retention_days", "0");

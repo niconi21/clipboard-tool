@@ -728,7 +728,7 @@ async fn seed_settings(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("active_theme", "midnight"),
         ("page_size", "50"),
         ("language", "en"),
-        ("max_image_size_bytes", "10485760"),
+        ("max_image_size_bytes", "36700160"),
     ];
 
     for (key, value) in defaults {
