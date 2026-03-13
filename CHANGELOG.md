@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - fix(#23): tray menu label now toggles correctly between Open/Close when hiding the window via the custom close button
 - fix(#24): tray menu labels now respect the app language setting — updated at startup and in real time when the language is changed
 
-## [1.1.0] - TBD
+## [1.1.0] - 2026-03-12
 
 ### Added
 - feat(#6): lazy-load `highlight.js` via dynamic import — initial JS bundle reduced 73% (1.3 MB → 358 KB)
