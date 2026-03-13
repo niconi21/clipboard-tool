@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - feat(#9): collection chips shown directly on entry list rows — colored badges for each non-builtin collection the entry belongs to
+- feat(#26): Markdown preview renderer in DetailPanel — rendered HTML view with Preview/Source toggle, sanitized output, links open in system browser
 
 ### Fixed
 - fix(#21): app version in footer and About tab now read dynamically via `getVersion()` — no longer hardcoded
