@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- feat(#9): collection chips shown directly on entry list rows — colored badges for each non-builtin collection the entry belongs to
+
 ### Fixed
 - fix(#21): app version in footer and About tab now read dynamically via `getVersion()` — no longer hardcoded
 - fix(#22): theme selection indicator (checkmark + border) now updates immediately when switching themes in the Appearance tab
