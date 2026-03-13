@@ -259,8 +259,88 @@ pub async fn delete_entry(
     state: State<'_, DbState>,
     audit: State<'_, AuditLog>,
     id: i64,
+    collection_id: Option<i64>,
+    subcollection_id: Option<i64>,
 ) -> Result<(), String> {
-    // Prevent deleting an entry that belongs to one or more collections
+    // Context-aware deletion:
+    // - subcollection_id set → move entry to default subcollection
+    // - collection_id set (no subcollection_id) → unlink entry from that collection
+    // - neither set → permanent delete (cascade removes associations)
+
+    if let Some(sub_id) = subcollection_id {
+        let col_id = collection_id.ok_or("collection_id required with subcollection_id")?;
+        // Move to default subcollection
+        let default_sub: Option<(i64,)> = sqlx::query_as(
+            "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+        )
+        .bind(col_id)
+        .fetch_optional(&state.0)
+        .await
+        .map_err(db_err)?;
+        let default_id = default_sub.ok_or("No default subcollection found")?.0;
+        if default_id != sub_id {
+            sqlx::query(
+                "UPDATE entry_collections SET subcollection_id = ?1 \
+                 WHERE entry_id = ?2 AND collection_id = ?3",
+            )
+            .bind(default_id)
+            .bind(id)
+            .bind(col_id)
+            .execute(&state.0)
+            .await
+            .map_err(db_err)?;
+        }
+        audit.log("entry_moved_to_default_sub", serde_json::json!({ "entry_id": id, "collection_id": col_id }));
+        return Ok(());
+    }
+
+    if let Some(col_id) = collection_id {
+        // Block if entry is in a non-default subcollection
+        let in_sub: Option<(Option<i64>,)> = sqlx::query_as(
+            "SELECT ec.subcollection_id FROM entry_collections ec \
+             WHERE ec.entry_id = ?1 AND ec.collection_id = ?2",
+        )
+        .bind(id)
+        .bind(col_id)
+        .fetch_optional(&state.0)
+        .await
+        .map_err(db_err)?;
+
+        if let Some((Some(sub_id),)) = in_sub {
+            let is_default: Option<(bool,)> = sqlx::query_as(
+                "SELECT is_default FROM subcollections WHERE id = ?1",
+            )
+            .bind(sub_id)
+            .fetch_optional(&state.0)
+            .await
+            .map_err(db_err)?;
+            if !is_default.map(|(d,)| d).unwrap_or(true) {
+                let sub_name: Option<(String,)> = sqlx::query_as(
+                    "SELECT name FROM subcollections WHERE id = ?1",
+                )
+                .bind(sub_id)
+                .fetch_optional(&state.0)
+                .await
+                .map_err(db_err)?;
+                let name = sub_name.map(|(n,)| n).unwrap_or_default();
+                return Err(format!("ENTRY_IN_SUBCOLLECTION:{}", name));
+            }
+        }
+
+        // Unlink entry from collection (keep the entry itself)
+        sqlx::query(
+            "DELETE FROM entry_collections WHERE entry_id = ?1 AND collection_id = ?2",
+        )
+        .bind(id)
+        .bind(col_id)
+        .execute(&state.0)
+        .await
+        .map_err(db_err)?;
+        audit.log("entry_unlinked", serde_json::json!({ "entry_id": id, "collection_id": col_id }));
+        return Ok(());
+    }
+
+    // Permanent delete — only allowed if entry has no collection associations
     let collection_names: Vec<(String,)> = sqlx::query_as(
         "SELECT c.name FROM collections c \
          JOIN entry_collections ec ON ec.collection_id = c.id \

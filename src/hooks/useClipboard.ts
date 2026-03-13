@@ -106,8 +106,12 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
     return () => { cancelled = true; unlistenFn?.(); };
   }, [search, hasActiveFilter, favoriteOnly, collectionId, load, enabled]);
 
-  const removeEntry = useCallback(async (id: number) => {
-    await invoke("delete_entry", { id }); // throws if entry is in a collection
+  const removeEntry = useCallback(async (id: number, collectionId?: number | null, subcollectionId?: number | null) => {
+    await invoke("delete_entry", {
+      id,
+      collectionId: collectionId ?? null,
+      subcollectionId: subcollectionId ?? null,
+    });
     setEntries((prev) => {
       const updated = prev.filter((e) => e.id !== id);
       offsetRef.current = updated.length;

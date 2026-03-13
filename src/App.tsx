@@ -222,15 +222,21 @@ function App() {
 
   function handleDelete(id: number) {
     if (selectedEntry?.id === id) setSelectedEntry(null);
-    removeEntry(id)
+    // Context-aware: subcollection → unlink from sub, collection → unlink from col, all/favorites → permanent delete
+    const colId = (typeof activeTab === "number") ? activeTab : (activeTab === "favorites" ? favoritesId : null);
+    const subId = activeSubcollection;
+    removeEntry(id, colId, subId)
       .then(() => { loadCounts(); refreshCollectionCounts(); bumpSubCounts(); })
       .catch((e: unknown) => {
         let msg: string;
         if (typeof e === "string" && e.startsWith("ENTRY_IN_COLLECTION:")) {
           const names = e.slice("ENTRY_IN_COLLECTION:".length);
           msg = t("app.delete_error_in_collection", { names });
+        } else if (typeof e === "string" && e.startsWith("ENTRY_IN_SUBCOLLECTION:")) {
+          const name = e.slice("ENTRY_IN_SUBCOLLECTION:".length);
+          msg = t("app.delete_error_in_subcollection", { name });
         } else {
-          msg = t("app.delete_error_fallback");
+          msg = typeof e === "string" ? e : t("app.delete_error_fallback");
         }
         setDeleteError(msg);
         setTimeout(() => setDeleteError(null), 5000);

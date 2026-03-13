@@ -230,7 +230,8 @@
   "app": {
     "footer_hint": "Clic para vista previa · Hover para acciones",
     "delete_error_fallback": "No se pudo eliminar la entrada.",
-    "delete_error_in_collection": "La entrada pertenece a la(s) colección(es): {{names}}. Quítala de todas las colecciones antes de eliminarla."
+    "delete_error_in_collection": "La entrada pertenece a la(s) colección(es): {{names}}. Quítala de todas las colecciones antes de eliminarla.",
+    "delete_error_in_subcollection": "La entrada está en la subcolección \"{{name}}\". Quítala de la subcolección primero."
   },
   "subcollections": {
     "all": "Todas",
