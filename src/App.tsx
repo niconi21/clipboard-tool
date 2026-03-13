@@ -92,7 +92,7 @@ function App() {
   const { contentTypes, colorFor, labelFor, refresh: refreshContentTypes } = useContentTypes(initialContentTypes);
   const { activeTheme, setTheme } = useTheme(themes, activeThemeSlug);
   const { collections, userCollections, counts: collectionCounts, create: createCollection, update: updateCollection, remove: removeCollection, refreshCounts: refreshCollectionCounts } = useCollections(initialCollections);
-  const { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections } = useClipboard(
+  const { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias } = useClipboard(
     search, filters, pageSize,
     activeTab === "favorites",
     typeof activeTab === "number" ? activeTab : null,
@@ -481,6 +481,7 @@ function App() {
               loadCounts();
               patchEntryCollections(entryId, collectionIds);
             }}
+                onAliasChanged={(entryId, alias) => patchEntryAlias(entryId, alias)}
               />
             </div>
           </>

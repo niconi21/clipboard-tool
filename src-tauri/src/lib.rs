@@ -187,6 +187,7 @@ pub fn run() {
             commands::get_languages,
             commands::bootstrap,
             commands::hide_window,
+            commands::update_entry_alias,
         ])
         .on_window_event(|window, event| {
             let app = window.app_handle();

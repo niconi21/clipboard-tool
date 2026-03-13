@@ -54,7 +54,11 @@
     "window": "Ventana",
     "category": "Categoría",
     "status": "Estado",
-    "favorite": "Favorito"
+    "favorite": "Favorito",
+    "alias_add": "Agregar alias…",
+    "alias_edit": "Editar alias",
+    "alias_placeholder": "Alias…",
+    "alias_clear": "Quitar alias"
   },
   "collection_selector": {
     "add": "Agregar a colección",

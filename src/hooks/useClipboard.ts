@@ -130,5 +130,11 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
     );
   }, []);
 
-  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections };
+  const patchEntryAlias = useCallback((id: number, alias: string | null) => {
+    setEntries((prev) =>
+      prev.map((e) => e.id === id ? { ...e, alias } : e)
+    );
+  }, []);
+
+  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias };
 }

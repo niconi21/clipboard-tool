@@ -100,7 +100,7 @@ pub async fn get_entries(
 
     if let Some(q) = search.as_deref().filter(|s| !s.is_empty()) {
         let i = params.len() + 1;
-        conditions.push(format!("(entries.content LIKE ?{i} OR entries.window_title LIKE ?{i})"));
+        conditions.push(format!("(entries.content LIKE ?{i} OR entries.window_title LIKE ?{i} OR entries.alias LIKE ?{i})"));
         params.push(format!("%{}%", q));
     }
     if let Some(app) = source_app.as_deref().filter(|s| !s.is_empty()) {
@@ -158,7 +158,8 @@ pub async fn get_entries(
                 COALESCE(cat.name, 'other') AS category,
                 entries.source_app, entries.window_title,
                 {is_fav} AS is_favorite, entries.created_at,
-                COALESCE(GROUP_CONCAT(DISTINCT ec_all.collection_id), '') AS collection_ids
+                COALESCE(GROUP_CONCAT(DISTINCT ec_all.collection_id), '') AS collection_ids,
+                entries.alias
          FROM entries
          LEFT JOIN categories cat ON cat.id = entries.category_id
          LEFT JOIN entry_collections ec_all ON ec_all.entry_id = entries.id
@@ -175,6 +176,21 @@ pub async fn get_entries(
     }
 
     query.fetch_all(pool).await.map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn update_entry_alias(
+    state: State<'_, DbState>,
+    id: i64,
+    alias: Option<String>,
+) -> Result<(), String> {
+    let alias = alias.and_then(|s| {
+        let trimmed = s.trim().to_string();
+        if trimmed.is_empty() { None } else { Some(trimmed) }
+    });
+    crate::db::update_entry_alias(&state.0, id, alias)
+        .await
+        .map_err(db_err)
 }
 
 #[tauri::command]

@@ -18,7 +18,8 @@ pub struct ClipboardEntry {
     pub window_title: Option<String>,
     pub is_favorite: bool, // computed: EXISTS in entry_collections for builtin collection
     pub created_at: String,
-    pub collection_ids: String, // COALESCE(GROUP_CONCAT(DISTINCT collection_id), '')
+    pub collection_ids: String,   // COALESCE(GROUP_CONCAT(DISTINCT collection_id), '')
+    pub alias: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, FromRow)]
@@ -166,6 +167,12 @@ pub const IS_FAVORITE_SQL: &str = "EXISTS(
 async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     create_fresh_schema(pool).await?;
 
+    // Idempotent column additions for existing databases.
+    // "duplicate column name" error means it's already there — safe to ignore.
+    let _ = sqlx::query("ALTER TABLE entries ADD COLUMN alias TEXT")
+        .execute(pool)
+        .await;
+
     // FK dependency order:
     //   categories      → before context_rules (context_rules.category_id)
     //   content_types   → before content_rules (content_type_rules.content_type)
@@ -220,6 +227,7 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             category_id  INTEGER REFERENCES categories(id),
             source_app   TEXT,
             window_title TEXT,
+            alias        TEXT,
             created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
         )",
     )
@@ -661,7 +669,8 @@ pub async fn save_entry(
                 COALESCE(cat.name, 'other') AS category,
                 entries.source_app, entries.window_title,
                 {IS_FAVORITE_SQL} AS is_favorite, entries.created_at,
-                '' AS collection_ids
+                '' AS collection_ids,
+                entries.alias
          FROM entries
          LEFT JOIN categories cat ON cat.id = entries.category_id
          WHERE entries.id = ?1",
@@ -669,6 +678,19 @@ pub async fn save_entry(
     .bind(id)
     .fetch_one(pool)
     .await
+}
+
+pub async fn update_entry_alias(
+    pool: &SqlitePool,
+    id: i64,
+    alias: Option<String>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE entries SET alias = ?1 WHERE id = ?2")
+        .bind(alias)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 pub async fn get_context_rules(pool: &SqlitePool) -> Result<Vec<ContextRule>, sqlx::Error> {

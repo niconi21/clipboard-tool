@@ -53,7 +53,12 @@ export const EntryItem = memo(function EntryItem({
 
       {/* Content preview */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-content leading-snug font-mono line-clamp-2">
+        {entry.alias && (
+          <p className="text-sm text-content font-medium leading-snug truncate">
+            {entry.alias}
+          </p>
+        )}
+        <p className={`text-sm leading-snug font-mono line-clamp-2 ${entry.alias ? "text-content-3" : "text-content"}`}>
           {entry.content.replaceAll("\n", " ↵ ")}
         </p>
         <div className="flex items-center gap-2 mt-0.5">

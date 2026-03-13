@@ -54,7 +54,11 @@
     "window": "Window",
     "category": "Category",
     "status": "Status",
-    "favorite": "Favorite"
+    "favorite": "Favorite",
+    "alias_add": "Add alias…",
+    "alias_edit": "Edit alias",
+    "alias_placeholder": "Alias…",
+    "alias_clear": "Clear alias"
   },
   "collection_selector": {
     "add": "Add to collection",

@@ -13,6 +13,7 @@ interface Props {
   labelFor: (name: string) => string;
   onClose: () => void;
   onCollectionChanged?: (entryId: number, collectionIds: number[]) => void;
+  onAliasChanged?: (entryId: number, alias: string | null) => void;
 }
 
 async function copyEntry(content: string) {
@@ -23,7 +24,7 @@ async function copyEntry(content: string) {
   }
 }
 
-export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, onCollectionChanged }: Props) {
+export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, onCollectionChanged, onAliasChanged }: Props) {
   const { t } = useTranslation();
   const color = colorFor(entry.content_type);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -34,10 +35,31 @@ export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, o
     below: boolean;
   } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [editingAlias, setEditingAlias] = useState(false);
+  const [aliasValue, setAliasValue] = useState(entry.alias ?? "");
+  const aliasInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setSelectionTooltip(null);
-  }, [entry.id]);
+    setEditingAlias(false);
+    setAliasValue(entry.alias ?? "");
+  }, [entry.id, entry.alias]);
+
+  useEffect(() => {
+    if (editingAlias) aliasInputRef.current?.focus();
+  }, [editingAlias]);
+
+  async function saveAlias() {
+    const trimmed = aliasValue.trim() || null;
+    setEditingAlias(false);
+    if (trimmed === (entry.alias ?? null)) return; // no change
+    try {
+      await invoke("update_entry_alias", { id: entry.id, alias: trimmed });
+      onAliasChanged?.(entry.id, trimmed);
+    } catch (e) {
+      console.error("[DetailPanel] alias save failed:", e);
+    }
+  }
 
   function handleMouseUp(e: React.MouseEvent) {
     const selection = window.getSelection();
@@ -75,14 +97,59 @@ export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, o
   return (
     <div className="flex flex-col w-full h-full border-l border-stroke bg-base overflow-hidden">
       {/* Panel header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-stroke shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-stroke shrink-0 gap-2">
         <span
-          className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+          className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide shrink-0"
           style={{ backgroundColor: color + "26", color }}
         >
           {labelFor(entry.content_type)}
         </span>
-        <div className="flex items-center gap-1">
+
+        {/* Alias field */}
+        {editingAlias ? (
+          <input
+            ref={aliasInputRef}
+            value={aliasValue}
+            onChange={(e) => setAliasValue(e.target.value)}
+            onBlur={saveAlias}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveAlias();
+              if (e.key === "Escape") { setEditingAlias(false); setAliasValue(entry.alias ?? ""); }
+            }}
+            placeholder={t("detail.alias_placeholder")}
+            className="flex-1 min-w-0 bg-surface-raised border border-accent/40 rounded px-2 py-0.5 text-xs text-content outline-none focus:border-accent"
+          />
+        ) : (
+          <button
+            onClick={() => setEditingAlias(true)}
+            className="flex-1 min-w-0 text-left truncate"
+            title={t("detail.alias_edit")}
+          >
+            {entry.alias ? (
+              <span className="text-xs font-medium text-content truncate">{entry.alias}</span>
+            ) : (
+              <span className="text-[11px] text-content-3 hover:text-content-2 transition-colors">{t("detail.alias_add")}</span>
+            )}
+          </button>
+        )}
+
+        {entry.alias && !editingAlias && (
+          <button
+            onClick={async () => {
+              await invoke("update_entry_alias", { id: entry.id, alias: null });
+              onAliasChanged?.(entry.id, null);
+              setAliasValue("");
+            }}
+            className="shrink-0 p-0.5 rounded text-content-3 hover:text-danger transition-colors"
+            title={t("detail.alias_clear")}
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+
+        <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => copyEntry(entry.content)}
             className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-content-2 hover:text-content hover:bg-surface-raised transition-colors"

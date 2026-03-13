@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat(#2): optional alias for clipboard entries — inline editable field in DetailPanel header; alias shown in bold above content preview in list; searchable alongside content and window title
 - feat(#9): collection chips shown directly on entry list rows — colored badges for each non-builtin collection the entry belongs to
 - feat(#25): improved content type detection — JSON raises min\_hits to 3 with typed-value and comma-key patterns; SQL gains GROUP/ORDER BY, JOIN variants, and comment patterns; Shell adds command substitution and UPPERCASE variable assignment; Code adds decorator and OOP modifier patterns; Markdown adds table row, horizontal rule, and image patterns
 - feat(#26): Markdown preview renderer in DetailPanel — rendered HTML view with Preview/Source toggle, sanitized output, links open in system browser

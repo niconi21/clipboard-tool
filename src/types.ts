@@ -8,6 +8,7 @@ export interface ClipboardEntry {
   is_favorite: boolean;
   created_at: string;
   collection_ids: string; // comma-separated collection ids, e.g. "1,3" or ""
+  alias: string | null;
 }
 
 export interface Category {
