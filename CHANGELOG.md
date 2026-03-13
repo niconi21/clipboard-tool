@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - fix(#21): app version in footer and About tab now read dynamically via `getVersion()` — no longer hardcoded
+- fix(#22): theme selection indicator (checkmark + border) now updates immediately when switching themes in the Appearance tab
+- fix(#23): tray menu label now toggles correctly between Open/Close when hiding the window via the custom close button
+- fix(#24): tray menu labels now respect the app language setting — updated at startup and in real time when the language is changed
 
 ## [1.1.0] - TBD
 
