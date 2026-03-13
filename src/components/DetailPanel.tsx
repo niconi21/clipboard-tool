@@ -31,7 +31,7 @@ async function copyEntry(entry: ClipboardEntry) {
 }
 
 export function DetailPanel({ entry, collections, subcollections, contentTypes, colorFor, onClose, onCollectionChanged, onAliasChanged, onContentTypeChanged }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const color = colorFor(entry.content_type);
   const contentRef = useRef<HTMLDivElement>(null);
   const [selectionTooltip, setSelectionTooltip] = useState<{
@@ -251,7 +251,7 @@ export function DetailPanel({ entry, collections, subcollections, contentTypes, 
             />
           </div>
         )}
-        <MetaRow label={t("detail.when")} value={timeAgo(entry.created_at, t)} />
+        <MetaRow label={t("detail.when")} value={timeAgo(entry.created_at, t, i18n.language)} />
         {entry.source_app && <MetaRow label={t("detail.app")} value={entry.source_app} />}
         {entry.window_title && (
           <MetaRow label={t("detail.window")} value={entry.window_title} truncate />

@@ -55,7 +55,7 @@ export const EntryItem = memo(function EntryItem({
   labelFor,
 }: Props) {
   const color = colorFor(entry.content_type);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const collectionChips = entry.collection_ids
     ? entry.collection_ids.split(",").map(Number).flatMap((id) => {
@@ -99,7 +99,7 @@ export const EntryItem = memo(function EntryItem({
           {entry.source_app && (
             <span className="text-[10px] text-content-2">{entry.source_app}</span>
           )}
-          <span className="text-[10px] text-content-3">{timeAgo(entry.created_at, t)}</span>
+          <span className="text-[10px] text-content-3">{timeAgo(entry.created_at, t, i18n.language)}</span>
         </div>
         {collectionChips.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(#36): export/import user configuration — export custom settings, themes, categories, content types, collections, and rules to a JSON file via native save dialog; import from JSON with merge strategy (skip duplicates, upsert settings). Accessible from Settings > About
 
 ### Fixed
+- fix(#32): tiered timestamp formatting — entries <24h show relative time ("5m ago"), ≥24h same year show "12 mar 14:30", different year shows full date with year. Respects current locale
 - fix(#27): prevent multiple app instances — uses `tauri-plugin-single-instance` to focus the existing window when a second launch is attempted
 - fix(#21): app version in footer and About tab now read dynamically via `getVersion()` — no longer hardcoded
 - fix(#22): theme selection indicator (checkmark + border) now updates immediately when switching themes in the Appearance tab
