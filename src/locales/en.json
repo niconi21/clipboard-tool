@@ -150,6 +150,14 @@
       "max_bytes_desc": "Content longer than this is truncated before pattern matching. <code>0</code> = no limit.",
       "max_image_label": "Max image size (bytes)",
       "max_image_desc": "Maximum raw size of clipboard images to capture. <code>0</code> = no limit."
+    },
+    "reclassify": {
+      "button": "Re-classify entries",
+      "desc": "Re-apply content type and category rules to all existing entries.",
+      "confirm_title": "Re-classify all entries based on current rules?",
+      "include_overrides": "Include manually overridden entries",
+      "result": "{{count}} entries updated",
+      "running": "Re-classifying…"
     }
   },
   "collections_mgr": {

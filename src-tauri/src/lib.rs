@@ -207,6 +207,7 @@ pub fn run() {
             commands::get_entry_subcollection_ids,
             commands::get_image_base64,
             commands::copy_image_to_clipboard,
+            commands::reclassify_entries,
         ])
         .on_window_event(|window, event| {
             let app = window.app_handle();

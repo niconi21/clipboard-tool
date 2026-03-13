@@ -312,6 +312,7 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             source_app   TEXT,
             window_title TEXT,
             alias        TEXT,
+            manual_override INTEGER NOT NULL DEFAULT 0,
             created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
         )",
     )
@@ -834,12 +835,63 @@ pub async fn update_entry_content_type(
     id: i64,
     content_type: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE entries SET content_type = ?1 WHERE id = ?2")
+    sqlx::query("UPDATE entries SET content_type = ?1, manual_override = 1 WHERE id = ?2")
         .bind(content_type)
         .bind(id)
         .execute(pool)
         .await?;
     Ok(())
+}
+
+// ── Reclassify ───────────────────────────────────────────────────────────────
+
+#[derive(FromRow)]
+pub struct ReclassifyRow {
+    pub id: i64,
+    pub content: String,
+    pub content_type: String,
+    pub category_id: Option<i64>,
+    pub source_app: Option<String>,
+    pub window_title: Option<String>,
+}
+
+pub async fn get_entries_for_reclassify(
+    pool: &SqlitePool,
+    include_overrides: bool,
+) -> Result<Vec<ReclassifyRow>, sqlx::Error> {
+    let sql = if include_overrides {
+        "SELECT id, content, content_type, category_id, source_app, window_title
+         FROM entries WHERE content_type != 'image'"
+    } else {
+        "SELECT id, content, content_type, category_id, source_app, window_title
+         FROM entries WHERE manual_override = 0 AND content_type != 'image'"
+    };
+    sqlx::query_as::<_, ReclassifyRow>(sql)
+        .fetch_all(pool)
+        .await
+}
+
+pub async fn batch_update_classification(
+    pool: &SqlitePool,
+    updates: &[(i64, &str, Option<i64>)],
+    reset_override: bool,
+) -> Result<u64, sqlx::Error> {
+    let mut count = 0u64;
+    for (id, content_type, category_id) in updates {
+        let sql = if reset_override {
+            "UPDATE entries SET content_type = ?1, category_id = ?2, manual_override = 0 WHERE id = ?3"
+        } else {
+            "UPDATE entries SET content_type = ?1, category_id = ?2 WHERE id = ?3"
+        };
+        sqlx::query(sql)
+            .bind(content_type)
+            .bind(category_id)
+            .bind(id)
+            .execute(pool)
+            .await?;
+        count += 1;
+    }
+    Ok(count)
 }
 
 // ── Collection rules ─────────────────────────────────────────────────────────

@@ -341,6 +341,14 @@ function App() {
     setCollectionRules((prev) => prev.map((r) => r.id === id ? { ...r, enabled } : r));
   }
 
+  // ── Reclassify ─────────────────────────────────────────────────────────────
+  async function handleReclassify(includeOverrides: boolean): Promise<number> {
+    const count = await invoke<number>("reclassify_entries", { includeOverrides });
+    loadCounts();
+    refreshCollectionCounts();
+    return count;
+  }
+
   // ── Theme CRUD ──────────────────────────────────────────────────────────────
   function colorsToCamel(c: ThemeColors) {
     return {
@@ -484,6 +492,7 @@ function App() {
             onCreateTheme={handleCreateTheme}
             onUpdateTheme={handleUpdateTheme}
             onDeleteTheme={handleDeleteTheme}
+            onReclassify={handleReclassify}
           />
         </div>
       ) : (

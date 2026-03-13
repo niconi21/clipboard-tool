@@ -1,7 +1,7 @@
 use regex::Regex;
 use tauri::{Manager, State};
 
-use crate::audit::AuditLog;
+use crate::audit::{AppLog, AuditLog};
 use crate::categorizer::RulesCache;
 use crate::clipboard::{AppCopiedContent, AppCopiedImageHash};
 use crate::db::{
@@ -214,6 +214,43 @@ pub async fn update_entry_content_type(
     crate::db::update_entry_content_type(&state.0, id, &content_type)
         .await
         .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn reclassify_entries(
+    state: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    app_log: State<'_, AppLog>,
+    include_overrides: bool,
+) -> Result<u64, String> {
+    cache.refresh(&state.0).await;
+    let rows = crate::db::get_entries_for_reclassify(&state.0, include_overrides)
+        .await
+        .map_err(db_err)?;
+
+    let mut updates: Vec<(i64, String, Option<i64>)> = Vec::new();
+    for row in &rows {
+        let result = cache.classify(
+            &row.content,
+            row.source_app.as_deref(),
+            row.window_title.as_deref(),
+        );
+        if result.content_type != row.content_type || result.category_id != row.category_id {
+            updates.push((row.id, result.content_type, result.category_id));
+        }
+    }
+
+    let refs: Vec<(i64, &str, Option<i64>)> = updates
+        .iter()
+        .map(|(id, ct, cat)| (*id, ct.as_str(), *cat))
+        .collect();
+
+    let count = crate::db::batch_update_classification(&state.0, &refs, include_overrides)
+        .await
+        .map_err(db_err)?;
+
+    app_log.info("reclassify", &format!("reclassified {count} entries (include_overrides={include_overrides})"));
+    Ok(count)
 }
 
 #[tauri::command]

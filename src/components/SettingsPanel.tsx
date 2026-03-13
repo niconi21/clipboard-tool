@@ -76,6 +76,7 @@ interface Props {
   onCreateTheme: (name: string, colors: ThemeColors) => Promise<void>;
   onUpdateTheme: (slug: string, name: string, colors: ThemeColors) => Promise<void>;
   onDeleteTheme: (slug: string) => Promise<void>;
+  onReclassify: (includeOverrides: boolean) => Promise<number>;
 }
 
 type Tab = "appearance" | "content-types" | "categories" | "collections" | "behavior" | "about";
@@ -120,6 +121,7 @@ export function SettingsPanel({
   onCreateTheme,
   onUpdateTheme,
   onDeleteTheme,
+  onReclassify,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
@@ -133,6 +135,27 @@ export function SettingsPanel({
     colors: ThemeColors;
   } | null>(null);
   const [themeSaving, setThemeSaving] = useState(false);
+
+  // Reclassify state
+  const [reclassifyDialog, setReclassifyDialog] = useState(false);
+  const [reclassifyIncludeOverrides, setReclassifyIncludeOverrides] = useState(false);
+  const [reclassifyRunning, setReclassifyRunning] = useState(false);
+  const [reclassifyResult, setReclassifyResult] = useState<number | null>(null);
+
+  async function handleReclassify() {
+    setReclassifyRunning(true);
+    setReclassifyResult(null);
+    try {
+      const count = await onReclassify(reclassifyIncludeOverrides);
+      setReclassifyResult(count);
+    } catch (e) {
+      console.error("[Reclassify] failed:", e);
+    } finally {
+      setReclassifyRunning(false);
+      setReclassifyDialog(false);
+      setReclassifyIncludeOverrides(false);
+    }
+  }
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "appearance",    label: t("settings.tabs.appearance") },
@@ -548,6 +571,16 @@ export function SettingsPanel({
                 />
               </SettingRow>
             </div>
+            <ReclassifyBlock
+              dialog={reclassifyDialog}
+              running={reclassifyRunning}
+              result={reclassifyResult}
+              includeOverrides={reclassifyIncludeOverrides}
+              onOpenDialog={() => { setReclassifyDialog(true); setReclassifyResult(null); }}
+              onCloseDialog={() => { setReclassifyDialog(false); setReclassifyIncludeOverrides(false); }}
+              onToggleOverrides={setReclassifyIncludeOverrides}
+              onConfirm={handleReclassify}
+            />
           </Section>
         )}
 
@@ -723,6 +756,66 @@ function DepSection({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ReclassifyBlock({
+  dialog, running, result, includeOverrides,
+  onOpenDialog, onCloseDialog, onToggleOverrides, onConfirm,
+}: {
+  dialog: boolean; running: boolean; result: number | null; includeOverrides: boolean;
+  onOpenDialog: () => void; onCloseDialog: () => void;
+  onToggleOverrides: (v: boolean) => void; onConfirm: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-4 pt-4 border-t border-stroke space-y-2">
+      {!dialog ? (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenDialog}
+              disabled={running}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke hover:border-accent hover:text-accent transition-colors text-content-2 disabled:opacity-50"
+            >
+              {running ? t("settings.reclassify.running") : t("settings.reclassify.button")}
+            </button>
+            {result !== null && (
+              <span className="text-xs text-accent">{t("settings.reclassify.result", { count: result })}</span>
+            )}
+          </div>
+          <p className="text-[11px] text-content-3">{t("settings.reclassify.desc")}</p>
+        </div>
+      ) : (
+        <div className="p-3 rounded-lg bg-surface border border-stroke space-y-3">
+          <p className="text-xs font-medium text-content">{t("settings.reclassify.confirm_title")}</p>
+          <label className="flex items-center gap-2 text-xs text-content-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeOverrides}
+              onChange={(e) => onToggleOverrides(e.target.checked)}
+              className="rounded border-stroke accent-accent"
+            />
+            {t("settings.reclassify.include_overrides")}
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onConfirm}
+              disabled={running}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {running ? t("settings.reclassify.running") : t("settings.reclassify.button")}
+            </button>
+            <button
+              onClick={onCloseDialog}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content transition-colors"
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

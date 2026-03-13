@@ -150,6 +150,14 @@
       "max_bytes_desc": "El contenido más largo que esto se trunca antes de aplicar patrones. <code>0</code> = sin límite.",
       "max_image_label": "Máx. tamaño de imagen (bytes)",
       "max_image_desc": "Tamaño máximo de imágenes del portapapeles a capturar. <code>0</code> = sin límite."
+    },
+    "reclassify": {
+      "button": "Reclasificar entradas",
+      "desc": "Vuelve a aplicar las reglas de tipo de contenido y categoría a todas las entradas existentes.",
+      "confirm_title": "¿Reclasificar todas las entradas según las reglas actuales?",
+      "include_overrides": "Incluir entradas con tipo cambiado manualmente",
+      "result": "{{count}} entradas actualizadas",
+      "running": "Reclasificando…"
     }
   },
   "collections_mgr": {
