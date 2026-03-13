@@ -157,10 +157,13 @@ pub async fn get_entries(
         "SELECT entries.id, entries.content, entries.content_type,
                 COALESCE(cat.name, 'other') AS category,
                 entries.source_app, entries.window_title,
-                {is_fav} AS is_favorite, entries.created_at
+                {is_fav} AS is_favorite, entries.created_at,
+                COALESCE(GROUP_CONCAT(DISTINCT ec_all.collection_id), '') AS collection_ids
          FROM entries
          LEFT JOIN categories cat ON cat.id = entries.category_id
+         LEFT JOIN entry_collections ec_all ON ec_all.entry_id = entries.id
          {where_clause}
+         GROUP BY entries.id
          ORDER BY entries.created_at DESC
          LIMIT ?{limit_idx} OFFSET ?{offset_idx}",
         is_fav = crate::db::IS_FAVORITE_SQL,

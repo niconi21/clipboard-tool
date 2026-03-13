@@ -447,6 +447,7 @@ function App() {
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           <EntryList
             entries={entries}
+            collections={collections}
             loading={loading}
             loadingMore={loadingMore}
             hasMore={hasMore}

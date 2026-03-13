@@ -18,6 +18,7 @@ pub struct ClipboardEntry {
     pub window_title: Option<String>,
     pub is_favorite: bool, // computed: EXISTS in entry_collections for builtin collection
     pub created_at: String,
+    pub collection_ids: String, // COALESCE(GROUP_CONCAT(DISTINCT collection_id), '')
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, FromRow)]
@@ -646,7 +647,8 @@ pub async fn save_entry(
         "SELECT entries.id, entries.content, entries.content_type,
                 COALESCE(cat.name, 'other') AS category,
                 entries.source_app, entries.window_title,
-                {IS_FAVORITE_SQL} AS is_favorite, entries.created_at
+                {IS_FAVORITE_SQL} AS is_favorite, entries.created_at,
+                '' AS collection_ids
          FROM entries
          LEFT JOIN categories cat ON cat.id = entries.category_id
          WHERE entries.id = ?1",

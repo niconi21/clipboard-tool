@@ -1,10 +1,11 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
-import type { ClipboardEntry } from "../types";
+import type { ClipboardEntry, Collection } from "../types";
 import { timeAgo } from "../utils/time";
 
 interface Props {
   entry: ClipboardEntry;
+  collections: Collection[];
   isSelected: boolean;
   onSelect: (entry: ClipboardEntry) => void;
   onDelete: (id: number) => void;
@@ -16,6 +17,7 @@ interface Props {
 
 export const EntryItem = memo(function EntryItem({
   entry,
+  collections,
   isSelected,
   onSelect,
   onDelete,
@@ -26,6 +28,13 @@ export const EntryItem = memo(function EntryItem({
 }: Props) {
   const color = colorFor(entry.content_type);
   const { t } = useTranslation();
+
+  const collectionChips = entry.collection_ids
+    ? entry.collection_ids.split(",").map(Number).flatMap((id) => {
+        const col = collections.find((c) => c.id === id && !c.is_builtin);
+        return col ? [col] : [];
+      })
+    : [];
 
   return (
     <div
@@ -53,6 +62,19 @@ export const EntryItem = memo(function EntryItem({
           )}
           <span className="text-[10px] text-content-3">{timeAgo(entry.created_at, t)}</span>
         </div>
+        {collectionChips.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {collectionChips.map((col) => (
+              <span
+                key={col.id}
+                className="rounded px-1.5 py-0.5 text-[9px] font-medium"
+                style={{ backgroundColor: col.color + "26", color: col.color }}
+              >
+                {col.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Actions — visible on hover or when selected */}

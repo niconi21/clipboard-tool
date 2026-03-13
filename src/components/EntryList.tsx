@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import type { ClipboardEntry } from "../types";
+import type { ClipboardEntry, Collection } from "../types";
 import { EntryItem } from "./EntryItem";
 
 interface Props {
   entries: ClipboardEntry[];
+  collections: Collection[];
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
@@ -21,6 +22,7 @@ interface Props {
 
 export function EntryList({
   entries,
+  collections,
   loading,
   loadingMore,
   hasMore,
@@ -77,6 +79,7 @@ export function EntryList({
         <EntryItem
           key={entry.id}
           entry={entry}
+          collections={collections}
           isSelected={entry.id === selectedId}
           onSelect={onSelect}
           onDelete={onDelete}
