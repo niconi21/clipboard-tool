@@ -22,6 +22,8 @@ Cross-platform clipboard manager built with Tauri 2.0 + Rust + React + TypeScrip
 | `tauri-plugin-autostart`         | Launch at system startup (`--minimized`)                                     |
 | `tauri-plugin-global-shortcut`   | Global hotkey to show/hide window                                            |
 | `tauri-plugin-clipboard-manager` | Clipboard capability (capabilities JSON)                                     |
+| `tauri-plugin-single-instance`   | Prevent multiple app instances; focus existing window on re-launch           |
+| `tauri-plugin-dialog`            | Native file open/save dialogs for config export/import                       |
 
 ## Frontend Dependencies
 
