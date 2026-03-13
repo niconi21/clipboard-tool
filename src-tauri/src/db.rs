@@ -225,6 +225,7 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_entries_created_at   ON entries(created_at DESC)").execute(pool).await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_entries_source_app   ON entries(source_app)").execute(pool).await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_entries_content_type ON entries(content_type)").execute(pool).await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_entries_category_id  ON entries(category_id)").execute(pool).await?;

@@ -27,10 +27,6 @@
         "skipTaskbar": true
       }
     ],
-    "trayIcon": {
-      "iconPath": "icons/32x32.png",
-      "iconAsTemplate": true
-    },
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data:; frame-src 'none'; object-src 'none';"
     }
@@ -44,6 +40,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "niconi21",
+    "copyright": "Copyright © 2026 niconi21. MIT License.",
+    "shortDescription": "Cross-platform clipboard manager",
+    "longDescription": "A local-first clipboard history manager. Capture, search, and organize everything you copy — text, URLs, code, colors and more.",
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
   }
 }

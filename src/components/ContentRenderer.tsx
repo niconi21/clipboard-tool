@@ -2,8 +2,6 @@ import { useEffect, useRef } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import hljs from "highlight.js";
-
 // Minimal dark theme inline — no external CSS import needed
 const CODE_STYLES: Record<string, string> = {
   "hljs-keyword":   "color:#c792ea",
@@ -153,16 +151,19 @@ function CodeRenderer({ content, language }: { content: string; language?: strin
 
   useEffect(() => {
     if (!ref.current) return;
-    ref.current.removeAttribute("data-highlighted");
-    hljs.highlightElement(ref.current);
-    // Apply inline color styles from our map
-    ref.current.querySelectorAll<HTMLElement>("[class]").forEach((el) => {
-      for (const cls of Array.from(el.classList)) {
-        if (CODE_STYLES[cls]) {
-          el.style.cssText = CODE_STYLES[cls];
-          break;
+    const el = ref.current;
+    el.removeAttribute("data-highlighted");
+    import("highlight.js").then(({ default: hljs }) => {
+      hljs.highlightElement(el);
+      // Apply inline color styles from our map
+      el.querySelectorAll<HTMLElement>("[class]").forEach((node) => {
+        for (const cls of Array.from(node.classList)) {
+          if (CODE_STYLES[cls]) {
+            node.style.cssText = CODE_STYLES[cls];
+            break;
+          }
         }
-      }
+      });
     });
   }, [content, language]);
 

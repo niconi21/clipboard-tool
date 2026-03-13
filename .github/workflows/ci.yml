@@ -1,25 +1,22 @@
-name: Release
+name: CI
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
 
 jobs:
-  release:
-    environment: production
-    permissions:
-      contents: write
+  build:
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: ubuntu-22.04
-            args: '--bundles deb,rpm'
-          - platform: macos-latest
-            args: '--bundles dmg'
           - platform: windows-latest
-            args: '--bundles msi,nsis'
 
     runs-on: ${{ matrix.platform }}
 
@@ -38,10 +35,6 @@ jobs:
             libxdo-dev \
             libssl-dev
 
-      - name: Install macOS dependencies
-        if: matrix.platform == 'macos-latest'
-        run: brew install create-dmg
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -59,15 +52,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "clipboard-tool ${{ github.ref_name }}"
-          releaseBody: |
-            See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+      - name: Type check frontend
+        run: npm run build
+
+      - name: Build Tauri (no bundle)
+        run: npm run tauri build -- --no-bundle
