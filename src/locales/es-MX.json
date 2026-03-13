@@ -227,6 +227,8 @@
     "apache2": "Apache 2.0",
     "mit_apache": "MIT / Apache 2.0",
     "bsd3": "BSD-3-Clause",
-    "public_domain": "Dominio público"
+    "public_domain": "Dominio público",
+    "database_title": "Base de datos",
+    "copy_path": "Copiar ruta"
   }
 }

@@ -946,6 +946,14 @@ pub fn hide_window(app: tauri::AppHandle) {
     }
 }
 
+// ── Data path ─────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_data_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
 // ── Image commands ───────────────────────────────────────────────────────────
 
 /// Returns a data URI (data:image/png;base64,...) for an image stored on disk.

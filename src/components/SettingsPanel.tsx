@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 import { useTranslation, Trans } from "react-i18next";
 import type { Category, Collection, CollectionRule, ContentRule, ContentTypeStyle, ContextRule, Language, Setting, Subcollection, Theme } from "../types";
 import { CollectionsManager } from "./CollectionsManager";
@@ -404,7 +405,26 @@ const BACKEND_DEPS: { name: string; version: string; licenseKey: string; url: st
 function AboutTab() {
   const { t } = useTranslation();
   const [version, setVersion] = useState("");
-  useEffect(() => { getVersion().then(setVersion); }, []);
+  const [dataDir, setDataDir] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    getVersion().then(setVersion);
+    invoke<string>("get_data_dir").then((dir) => {
+      setDataDir(dir);
+    });
+  }, []);
+
+  async function copyPath() {
+    const dbPath = dataDir + "/clipboard.db";
+    try {
+      await invoke("copy_to_clipboard", { content: dbPath });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      console.error("[AboutTab] copy path failed:", e);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -429,6 +449,38 @@ function AboutTab() {
           />
         </div>
       </div>
+
+      {/* Database info */}
+      {dataDir && (
+        <div className="p-4 rounded-lg bg-surface border border-stroke space-y-2">
+          <p className="text-xs font-semibold text-content">{t("about.database_title")}</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 min-w-0 text-[11px] text-content-2 font-mono truncate" title={dataDir + "/clipboard.db"}>
+              {dataDir}/clipboard.db
+            </code>
+            <button
+              onClick={copyPath}
+              className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-content-2 hover:text-content hover:bg-surface-raised transition-colors border border-stroke"
+            >
+              {copied ? (
+                <>
+                  <svg className="w-3 h-3 text-green-400" fill="none" viewBox="0 0 12 12" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2 6l3 3 5-5" />
+                  </svg>
+                  {t("detail.copied")}
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  {t("about.copy_path")}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Frontend deps */}
       <DepSection title={t("about.frontend_title")} deps={FRONTEND_DEPS} />

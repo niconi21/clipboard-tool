@@ -190,6 +190,7 @@ pub fn run() {
             commands::hide_window,
             commands::update_entry_alias,
             commands::update_entry_content_type,
+            commands::get_data_dir,
             commands::get_all_collection_rules,
             commands::create_collection_rule,
             commands::delete_collection_rule,

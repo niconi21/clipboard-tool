@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(#1): subcollections — hierarchical organization within collections. Each collection gets a default "Sin clasificar" subcollection. Users can create, rename, and delete subcollections. Left side panel shows subcollections when viewing a collection tab. Entries can be moved between subcollections via the collection selector in DetailPanel. Deleting a subcollection moves entries to the default. Schema: `subcollections` table + `subcollection_id` in `entry_collections`
 - feat(#4): image clipboard support — capture images from the system clipboard, store as PNG files on disk with SHA256 dedup. Thumbnail preview in entry list, full-size display in detail panel. Copy image back to clipboard. Orphaned image files cleaned up on deletion. Configurable `max_image_size_bytes` setting
 - feat(#28): manual content type override — clickable dropdown in DetailPanel header lets users change the content type of any entry. Override is permanent and immediately re-renders content with the appropriate renderer
+- feat(#33): show database file path in About tab — displays full path to `clipboard.db` with a copy-to-clipboard button
 
 ### Fixed
 - fix(#21): app version in footer and About tab now read dynamically via `getVersion()` — no longer hardcoded
