@@ -1,7 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 // Minimal dark theme inline — no external CSS import needed
 const CODE_STYLES: Record<string, string> = {
   "hljs-keyword":   "color:#c792ea",
@@ -43,7 +45,7 @@ export function ContentRenderer({ content, contentType }: Props) {
     case "json":     return <CodeRenderer content={content} language="json" />;
     case "sql":      return <CodeRenderer content={content} language="sql" />;
     case "shell":    return <CodeRenderer content={content} language="bash" />;
-    case "markdown": return <CodeRenderer content={content} language="markdown" />;
+    case "markdown": return <MarkdownRenderer content={content} />;
     default:         return <PlainRenderer content={content} />;
   }
 }
@@ -171,6 +173,65 @@ function CodeRenderer({ content, language }: { content: string; language?: strin
     <pre className="text-xs font-mono leading-relaxed whitespace-pre-wrap break-all select-text">
       <code ref={ref} className={language ? `language-${language}` : undefined}>{content}</code>
     </pre>
+  );
+}
+
+// ── Markdown ──────────────────────────────────────────────────────────────────
+
+function MarkdownRenderer({ content }: { content: string }) {
+  const { t } = useTranslation();
+  const [view, setView] = useState<"preview" | "source">("preview");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const html = DOMPurify.sanitize(marked.parse(content) as string);
+
+  // Intercept link clicks — open via openUrl instead of native <a> behavior
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || view !== "preview") return;
+    function handleClick(e: MouseEvent) {
+      const target = (e.target as HTMLElement).closest("a");
+      if (!target) return;
+      e.preventDefault();
+      const href = target.getAttribute("href");
+      if (href && isAllowedUrl(href)) openUrl(href).catch(console.error);
+    }
+    container.addEventListener("click", handleClick);
+    return () => container.removeEventListener("click", handleClick);
+  }, [view, html]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Toggle */}
+      <div className="flex gap-0.5 self-end p-0.5 rounded-lg bg-surface-raised border border-stroke">
+        <button
+          onClick={() => setView("preview")}
+          className={`px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+            view === "preview" ? "bg-accent/20 text-accent" : "text-content-3 hover:text-content-2"
+          }`}
+        >
+          {t("content_renderer.md_preview")}
+        </button>
+        <button
+          onClick={() => setView("source")}
+          className={`px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+            view === "source" ? "bg-accent/20 text-accent" : "text-content-3 hover:text-content-2"
+          }`}
+        >
+          {t("content_renderer.md_source")}
+        </button>
+      </div>
+
+      {view === "preview" ? (
+        <div
+          ref={containerRef}
+          className="markdown-preview select-text"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <CodeRenderer content={content} language="markdown" />
+      )}
+    </div>
   );
 }
 

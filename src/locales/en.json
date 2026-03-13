@@ -64,7 +64,9 @@
   "content_renderer": {
     "open_browser": "Open in browser",
     "non_http": "Non-http URL — cannot be opened",
-    "open_email": "Open email client"
+    "open_email": "Open email client",
+    "md_preview": "Preview",
+    "md_source": "Source"
   },
   "typeahead": {
     "search": "Search...",
