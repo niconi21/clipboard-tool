@@ -40,6 +40,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .setup(|app| {
@@ -208,6 +209,8 @@ pub fn run() {
             commands::get_image_base64,
             commands::copy_image_to_clipboard,
             commands::reclassify_entries,
+            commands::export_config,
+            commands::import_config,
         ])
         .on_window_event(|window, event| {
             let app = window.app_handle();

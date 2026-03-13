@@ -256,6 +256,12 @@
     "bsd3": "BSD-3-Clause",
     "public_domain": "Public Domain",
     "database_title": "Database",
-    "copy_path": "Copy path"
+    "copy_path": "Copy path",
+    "config_title": "Configuration",
+    "config_desc": "Export or import your custom settings, themes, categories, content types, collections, and rules.",
+    "export_button": "Export",
+    "import_button": "Import",
+    "export_success": "Configuration exported",
+    "import_result": "Imported: {{total}} items"
   }
 }

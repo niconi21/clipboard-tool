@@ -6,7 +6,7 @@ use crate::categorizer::RulesCache;
 use crate::clipboard::{AppCopiedContent, AppCopiedImageHash};
 use crate::db::{
     BootstrapData, Category, ClipboardEntry, Collection, ContentRule, ContentTypeStyle,
-    ContextRule, DbState, Language, Setting, Subcollection, Theme,
+    ContextRule, DbState, ImportSummary, Language, Setting, Subcollection, Theme,
 };
 
 // ── Error sanitization ────────────────────────────────────────────────────────
@@ -1124,4 +1124,68 @@ pub async fn copy_image_to_clipboard(
     arboard::Clipboard::new()
         .and_then(|mut cb| cb.set_image(img_data))
         .map_err(|e| e.to_string())
+}
+
+// ── Config Export / Import ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn export_config(
+    app: tauri::AppHandle,
+    state: State<'_, DbState>,
+    app_log: State<'_, AppLog>,
+) -> Result<String, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let config = crate::db::export_config(&state.0).await.map_err(db_err)?;
+    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+
+    let path = app.dialog()
+        .file()
+        .set_file_name("clipboard-tool-config.json")
+        .add_filter("JSON", &["json"])
+        .blocking_save_file();
+
+    let Some(path) = path else {
+        return Ok(String::new());
+    };
+
+    let file_path = path.as_path().ok_or("Invalid file path")?;
+    std::fs::write(file_path, &json).map_err(|e| e.to_string())?;
+
+    app_log.info("export_config", &format!("exported to {}", file_path.display()));
+    Ok(file_path.display().to_string())
+}
+
+#[tauri::command]
+pub async fn import_config(
+    app: tauri::AppHandle,
+    state: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    app_log: State<'_, AppLog>,
+) -> Result<ImportSummary, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let path = app.dialog()
+        .file()
+        .add_filter("JSON", &["json"])
+        .blocking_pick_file();
+
+    let Some(path) = path else {
+        return Err("CANCELLED".to_string());
+    };
+
+    let file_path = path.as_path().ok_or("Invalid file path")?;
+    let json = std::fs::read_to_string(file_path).map_err(|e| e.to_string())?;
+    let config: crate::db::ConfigExport = serde_json::from_str(&json)
+        .map_err(|e| format!("Invalid config file: {e}"))?;
+
+    if config.version != 1 {
+        return Err(format!("Unsupported config version: {}", config.version));
+    }
+
+    let summary = crate::db::import_config(&state.0, &config).await.map_err(db_err)?;
+    cache.refresh(&state.0).await;
+
+    app_log.info("import_config", &format!("imported config: {:?}", summary));
+    Ok(summary)
 }

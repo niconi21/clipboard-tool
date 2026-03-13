@@ -103,6 +103,18 @@ export interface BootstrapData {
   entry_counts:      [number, number];   // [all, favorites]
 }
 
+export interface ImportSummary {
+  settings: number;
+  themes: number;
+  categories: number;
+  content_types: number;
+  content_type_rules: number;
+  context_rules: number;
+  collections: number;
+  subcollections: number;
+  collection_rules: number;
+}
+
 export interface Theme {
   slug: string;
   name: string;

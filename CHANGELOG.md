@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(#33): show database file path in About tab — displays full path to `clipboard.db` with a copy-to-clipboard button
 - feat(#31): custom themes — create, edit, and delete custom color themes from Settings > Appearance. 11 color slots with live preview. Custom themes stored in DB with `is_builtin = 0`; builtin themes cannot be modified or deleted
 - feat(#30): re-classify existing entries when rules change — "Re-classify entries" button in Content Types and Categories settings tabs. Confirmation dialog with optional "Include manually overridden entries" checkbox. Adds `manual_override` column to entries; manual type changes via DetailPanel set the flag. Reclassification refreshes RulesCache, skips image entries, and batch-updates changed entries
+- feat(#36): export/import user configuration — export custom settings, themes, categories, content types, collections, and rules to a JSON file via native save dialog; import from JSON with merge strategy (skip duplicates, upsert settings). Accessible from Settings > About
 
 ### Fixed
 - fix(#21): app version in footer and About tab now read dynamically via `getVersion()` — no longer hardcoded

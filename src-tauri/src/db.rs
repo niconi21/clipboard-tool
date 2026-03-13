@@ -1896,3 +1896,284 @@ async fn seed_themes(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     }
     Ok(())
 }
+
+// ── Config Export / Import ──────────────────────────────────────────────────
+
+/// Keys that are machine-specific and should not be exported/imported.
+const SKIP_SETTINGS: &[&str] = &[
+    "window_x", "window_y", "window_width", "window_height", "detail_panel_width",
+];
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct ConfigExport {
+    pub version: u32,
+    pub exported_at: String,
+    pub settings: Vec<ExportSetting>,
+    pub themes: Vec<ExportTheme>,
+    pub categories: Vec<ExportCategory>,
+    pub content_types: Vec<ExportContentType>,
+    pub content_type_rules: Vec<ExportContentTypeRule>,
+    pub context_rules: Vec<ExportContextRule>,
+    pub collections: Vec<ExportCollection>,
+    pub subcollections: Vec<ExportSubcollection>,
+    pub collection_rules: Vec<ExportCollectionRule>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportSetting { pub key: String, pub value: String }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportTheme {
+    pub slug: String, pub name: String,
+    pub base: String, pub surface: String, pub surface_raised: String, pub surface_active: String,
+    pub stroke: String, pub stroke_strong: String, pub content: String, pub content_2: String,
+    pub content_3: String, pub accent: String, pub accent_text: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportCategory { pub name: String, pub color: String }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportContentType { pub name: String, pub label: String, pub color: String }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportContentTypeRule {
+    pub content_type: String, pub pattern: String, pub min_hits: i64, pub priority: i64, pub enabled: bool,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportContextRule {
+    pub category_name: String,
+    pub source_app_pattern: Option<String>, pub window_title_pattern: Option<String>,
+    pub priority: i64, pub enabled: bool,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportCollection { pub name: String, pub color: String }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportSubcollection { pub collection_name: String, pub name: String, pub is_default: bool }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct ExportCollectionRule {
+    pub collection_name: String,
+    pub content_type: Option<String>, pub source_app: Option<String>,
+    pub window_title: Option<String>, pub content_pattern: Option<String>,
+    pub priority: i64, pub enabled: bool,
+}
+
+#[derive(Debug, serde::Serialize, Default)]
+pub struct ImportSummary {
+    pub settings: u32,
+    pub themes: u32,
+    pub categories: u32,
+    pub content_types: u32,
+    pub content_type_rules: u32,
+    pub context_rules: u32,
+    pub collections: u32,
+    pub subcollections: u32,
+    pub collection_rules: u32,
+}
+
+pub async fn export_config(pool: &SqlitePool) -> Result<ConfigExport, sqlx::Error> {
+    let settings = sqlx::query_as::<_, ExportSetting>(
+        "SELECT key, value FROM settings"
+    ).fetch_all(pool).await?
+        .into_iter()
+        .filter(|s| !SKIP_SETTINGS.contains(&s.key.as_str()))
+        .collect();
+
+    let themes = sqlx::query_as::<_, ExportTheme>(
+        "SELECT slug, name, base, surface, surface_raised, surface_active, stroke, stroke_strong,
+                content, content_2, content_3, accent, accent_text
+         FROM themes WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let categories = sqlx::query_as::<_, ExportCategory>(
+        "SELECT name, color FROM categories WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let content_types = sqlx::query_as::<_, ExportContentType>(
+        "SELECT name, label, color FROM content_types WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let content_type_rules = sqlx::query_as::<_, ExportContentTypeRule>(
+        "SELECT content_type, pattern, min_hits, priority, enabled
+         FROM content_type_rules WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let context_rules = sqlx::query_as::<_, ExportContextRule>(
+        "SELECT COALESCE(c.name, '') AS category_name, r.source_app_pattern, r.window_title_pattern,
+                r.priority, r.enabled
+         FROM context_rules r LEFT JOIN categories c ON c.id = r.category_id
+         WHERE r.is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let collections = sqlx::query_as::<_, ExportCollection>(
+        "SELECT name, color FROM collections WHERE is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let subcollections = sqlx::query_as::<_, ExportSubcollection>(
+        "SELECT c.name AS collection_name, s.name, s.is_default
+         FROM subcollections s JOIN collections c ON c.id = s.collection_id
+         WHERE c.is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    let collection_rules = sqlx::query_as::<_, ExportCollectionRule>(
+        "SELECT c.name AS collection_name, r.content_type, r.source_app, r.window_title,
+                r.content_pattern, r.priority, r.enabled
+         FROM collection_rules r JOIN collections c ON c.id = r.collection_id
+         WHERE r.is_builtin = 0"
+    ).fetch_all(pool).await?;
+
+    Ok(ConfigExport {
+        version: 1,
+        exported_at: sqlx::query_scalar::<_, String>("SELECT datetime('now')")
+            .fetch_one(pool).await.unwrap_or_default(),
+        settings, themes, categories, content_types, content_type_rules,
+        context_rules, collections, subcollections, collection_rules,
+    })
+}
+
+pub async fn import_config(pool: &SqlitePool, config: &ConfigExport) -> Result<ImportSummary, sqlx::Error> {
+    let mut summary = ImportSummary::default();
+    let mut tx = pool.begin().await?;
+
+    // 1. Settings — upsert, skip machine-specific
+    for s in &config.settings {
+        if SKIP_SETTINGS.contains(&s.key.as_str()) { continue; }
+        let res = sqlx::query(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = datetime('now')"
+        ).bind(&s.key).bind(&s.value).execute(&mut *tx).await?;
+        if res.rows_affected() > 0 { summary.settings += 1; }
+    }
+
+    // 2. Themes — skip existing slugs
+    for t in &config.themes {
+        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM themes WHERE slug = ?1")
+            .bind(&t.slug).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO themes (slug, name, base, surface, surface_raised, surface_active,
+             stroke, stroke_strong, content, content_2, content_3, accent, accent_text, is_builtin)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13, 0)"
+        ).bind(&t.slug).bind(&t.name).bind(&t.base).bind(&t.surface)
+         .bind(&t.surface_raised).bind(&t.surface_active).bind(&t.stroke).bind(&t.stroke_strong)
+         .bind(&t.content).bind(&t.content_2).bind(&t.content_3).bind(&t.accent).bind(&t.accent_text)
+         .execute(&mut *tx).await?;
+        summary.themes += 1;
+    }
+
+    // 3. Categories — skip existing names
+    for c in &config.categories {
+        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM categories WHERE name = ?1")
+            .bind(&c.name).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query("INSERT INTO categories (name, color, is_builtin) VALUES (?1, ?2, 0)")
+            .bind(&c.name).bind(&c.color).execute(&mut *tx).await?;
+        summary.categories += 1;
+    }
+
+    // 4. Content types — skip existing names
+    for ct in &config.content_types {
+        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM content_types WHERE name = ?1")
+            .bind(&ct.name).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query("INSERT INTO content_types (name, label, color, is_builtin) VALUES (?1, ?2, ?3, 0)")
+            .bind(&ct.name).bind(&ct.label).bind(&ct.color).execute(&mut *tx).await?;
+        summary.content_types += 1;
+    }
+
+    // 5. Content type rules — skip if (content_type, pattern) already exists
+    for r in &config.content_type_rules {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT COUNT(*) > 0 FROM content_type_rules WHERE content_type = ?1 AND pattern = ?2"
+        ).bind(&r.content_type).bind(&r.pattern).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO content_type_rules (content_type, pattern, min_hits, priority, enabled, is_builtin)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0)"
+        ).bind(&r.content_type).bind(&r.pattern).bind(r.min_hits).bind(r.priority).bind(r.enabled)
+         .execute(&mut *tx).await?;
+        summary.content_type_rules += 1;
+    }
+
+    // 6. Context rules — resolve category_name to id
+    let cat_map: HashMap<String, i64> = sqlx::query_as::<_, (String, i64)>(
+        "SELECT name, id FROM categories"
+    ).fetch_all(&mut *tx).await?.into_iter().collect();
+
+    for r in &config.context_rules {
+        let cat_id = cat_map.get(&r.category_name).copied();
+        if cat_id.is_none() && !r.category_name.is_empty() { continue; }
+        let exists: bool = sqlx::query_scalar(
+            "SELECT COUNT(*) > 0 FROM context_rules
+             WHERE COALESCE(category_id, -1) = COALESCE(?1, -1)
+               AND COALESCE(source_app_pattern, '') = COALESCE(?2, '')
+               AND COALESCE(window_title_pattern, '') = COALESCE(?3, '')"
+        ).bind(cat_id).bind(&r.source_app_pattern).bind(&r.window_title_pattern)
+         .fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO context_rules (category_id, source_app_pattern, window_title_pattern, priority, enabled, is_builtin)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0)"
+        ).bind(cat_id).bind(&r.source_app_pattern).bind(&r.window_title_pattern)
+         .bind(r.priority).bind(r.enabled).execute(&mut *tx).await?;
+        summary.context_rules += 1;
+    }
+
+    // 7. Collections — skip existing names
+    for c in &config.collections {
+        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM collections WHERE name = ?1")
+            .bind(&c.name).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query("INSERT INTO collections (name, color, is_builtin) VALUES (?1, ?2, 0)")
+            .bind(&c.name).bind(&c.color).execute(&mut *tx).await?;
+        summary.collections += 1;
+    }
+
+    // Build collection name→id map (including pre-existing)
+    let col_map: HashMap<String, i64> = sqlx::query_as::<_, (String, i64)>(
+        "SELECT name, id FROM collections"
+    ).fetch_all(&mut *tx).await?.into_iter().collect();
+
+    // 8. Subcollections — resolve collection_name, skip duplicates
+    for s in &config.subcollections {
+        let Some(&col_id) = col_map.get(&s.collection_name) else { continue; };
+        let exists: bool = sqlx::query_scalar(
+            "SELECT COUNT(*) > 0 FROM subcollections WHERE collection_id = ?1 AND name = ?2"
+        ).bind(col_id).bind(&s.name).fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO subcollections (collection_id, name, is_default) VALUES (?1, ?2, ?3)"
+        ).bind(col_id).bind(&s.name).bind(s.is_default).execute(&mut *tx).await?;
+        summary.subcollections += 1;
+    }
+
+    // 9. Collection rules — resolve collection_name, skip duplicates
+    for r in &config.collection_rules {
+        let Some(&col_id) = col_map.get(&r.collection_name) else { continue; };
+        let exists: bool = sqlx::query_scalar(
+            "SELECT COUNT(*) > 0 FROM collection_rules
+             WHERE collection_id = ?1
+               AND COALESCE(content_type, '') = COALESCE(?2, '')
+               AND COALESCE(source_app, '') = COALESCE(?3, '')
+               AND COALESCE(window_title, '') = COALESCE(?4, '')
+               AND COALESCE(content_pattern, '') = COALESCE(?5, '')"
+        ).bind(col_id).bind(&r.content_type).bind(&r.source_app)
+         .bind(&r.window_title).bind(&r.content_pattern)
+         .fetch_one(&mut *tx).await?;
+        if exists { continue; }
+        sqlx::query(
+            "INSERT INTO collection_rules (collection_id, content_type, source_app, window_title, content_pattern, priority, enabled, is_builtin)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)"
+        ).bind(col_id).bind(&r.content_type).bind(&r.source_app).bind(&r.window_title)
+         .bind(&r.content_pattern).bind(r.priority).bind(r.enabled)
+         .execute(&mut *tx).await?;
+        summary.collection_rules += 1;
+    }
+
+    tx.commit().await?;
+    Ok(summary)
+}

@@ -72,26 +72,27 @@ function App() {
     [boot],
   );
 
-  useEffect(() => {
+  const runBootstrap = useCallback(() => {
     invoke<BootstrapData>("bootstrap")
       .then((data) => {
-        // Apply language before first render
         const lang = data.settings.find((s) => s.key === "language")?.value;
         if (lang) i18n.changeLanguage(lang);
 
-        // Set entry counts from bootstrap
         const [all, favorites] = data.entry_counts;
         setCounts({ all, favorites });
 
-        // Restore panel width
         const w = parseInt(data.settings.find((s) => s.key === "detail_panel_width")?.value ?? "", 10);
         if (!isNaN(w)) { setPanelWidth(w); panelWidthRef.current = w; }
 
         setThemes(data.themes);
+        setLocalSettings(data.settings);
+        settingsLoadedRef.current = false; // force reload of settings-panel data
         setBoot(data);
       })
       .catch(console.error);
   }, []);
+
+  useEffect(() => { runBootstrap(); }, [runBootstrap]);
 
   // ── Hooks — only fetch if not seeded from bootstrap ─────────────────────────
   const { contentTypes, colorFor, labelFor, refresh: refreshContentTypes } = useContentTypes(initialContentTypes);
@@ -341,6 +342,11 @@ function App() {
     setCollectionRules((prev) => prev.map((r) => r.id === id ? { ...r, enabled } : r));
   }
 
+  // ── Config import ──────────────────────────────────────────────────────────
+  const handleConfigImported = useCallback(() => {
+    runBootstrap();
+  }, [runBootstrap]);
+
   // ── Reclassify ─────────────────────────────────────────────────────────────
   async function handleReclassify(includeOverrides: boolean): Promise<number> {
     const count = await invoke<number>("reclassify_entries", { includeOverrides });
@@ -493,6 +499,7 @@ function App() {
             onUpdateTheme={handleUpdateTheme}
             onDeleteTheme={handleDeleteTheme}
             onReclassify={handleReclassify}
+            onConfigImported={handleConfigImported}
           />
         </div>
       ) : (

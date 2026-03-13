@@ -77,6 +77,7 @@ interface Props {
   onUpdateTheme: (slug: string, name: string, colors: ThemeColors) => Promise<void>;
   onDeleteTheme: (slug: string) => Promise<void>;
   onReclassify: (includeOverrides: boolean) => Promise<number>;
+  onConfigImported: () => void;
 }
 
 type Tab = "appearance" | "content-types" | "categories" | "collections" | "behavior" | "about";
@@ -122,6 +123,7 @@ export function SettingsPanel({
   onUpdateTheme,
   onDeleteTheme,
   onReclassify,
+  onConfigImported,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
@@ -135,6 +137,38 @@ export function SettingsPanel({
     colors: ThemeColors;
   } | null>(null);
   const [themeSaving, setThemeSaving] = useState(false);
+
+  // Config export/import state
+  const [exporting, setExporting] = useState(false);
+  const [exportDone, setExportDone] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importTotal, setImportTotal] = useState<number | null>(null);
+
+  async function handleExport() {
+    setExporting(true);
+    setExportDone(false);
+    try {
+      const path = await invoke<string>("export_config");
+      if (path) { setExportDone(true); setTimeout(() => setExportDone(false), 3000); }
+    } catch (e) { console.error("[Settings] export failed:", e); }
+    finally { setExporting(false); }
+  }
+
+  async function handleImport() {
+    setImporting(true);
+    setImportTotal(null);
+    try {
+      const s = await invoke<{ settings: number; themes: number; categories: number; content_types: number; content_type_rules: number; context_rules: number; collections: number; subcollections: number; collection_rules: number }>("import_config");
+      const total = s.settings + s.themes + s.categories + s.content_types + s.content_type_rules + s.context_rules + s.collections + s.subcollections + s.collection_rules;
+      setImportTotal(total);
+      onConfigImported();
+      setTimeout(() => setImportTotal(null), 5000);
+    } catch (e) {
+      if (typeof e === "string" && e === "CANCELLED") { /* user cancelled */ }
+      else { console.error("[Settings] import failed:", e); }
+    }
+    finally { setImporting(false); }
+  }
 
   // Reclassify state
   const [reclassifyDialog, setReclassifyDialog] = useState(false);
@@ -581,6 +615,27 @@ export function SettingsPanel({
               onToggleOverrides={setReclassifyIncludeOverrides}
               onConfirm={handleReclassify}
             />
+            <div className="mt-4 pt-4 border-t border-stroke space-y-1.5">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
+                >
+                  {t("about.export_button")}
+                </button>
+                <button
+                  onClick={handleImport}
+                  disabled={importing}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
+                >
+                  {t("about.import_button")}
+                </button>
+                {exportDone && <span className="text-xs text-accent">{t("about.export_success")}</span>}
+                {importTotal !== null && <span className="text-xs text-accent">{t("about.import_result", { total: importTotal })}</span>}
+              </div>
+              <p className="text-[11px] text-content-3">{t("about.config_desc")}</p>
+            </div>
           </Section>
         )}
 
