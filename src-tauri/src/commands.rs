@@ -335,6 +335,86 @@ pub async fn set_active_theme(state: State<'_, DbState>, slug: String) -> Result
         .map_err(db_err)
 }
 
+#[tauri::command]
+pub async fn create_theme(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    slug: String,
+    name: String,
+    base: String,
+    surface: String,
+    surface_raised: String,
+    surface_active: String,
+    stroke: String,
+    stroke_strong: String,
+    content: String,
+    content_2: String,
+    content_3: String,
+    accent: String,
+    accent_text: String,
+) -> Result<Theme, String> {
+    validate_name(&name)?;
+    validate_name(&slug)?;
+    for c in [&base, &surface, &surface_raised, &surface_active, &stroke, &stroke_strong,
+              &content, &content_2, &content_3, &accent, &accent_text] {
+        validate_color(c)?;
+    }
+    let theme = crate::db::create_theme(
+        &state.0, &slug, &name, &base, &surface, &surface_raised, &surface_active,
+        &stroke, &stroke_strong, &content, &content_2, &content_3, &accent, &accent_text,
+    )
+    .await
+    .map_err(db_err)?;
+    audit.log("theme_created", serde_json::json!({ "slug": slug }));
+    Ok(theme)
+}
+
+#[tauri::command]
+pub async fn update_theme(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    slug: String,
+    name: String,
+    base: String,
+    surface: String,
+    surface_raised: String,
+    surface_active: String,
+    stroke: String,
+    stroke_strong: String,
+    content: String,
+    content_2: String,
+    content_3: String,
+    accent: String,
+    accent_text: String,
+) -> Result<(), String> {
+    validate_name(&name)?;
+    for c in [&base, &surface, &surface_raised, &surface_active, &stroke, &stroke_strong,
+              &content, &content_2, &content_3, &accent, &accent_text] {
+        validate_color(c)?;
+    }
+    crate::db::update_theme(
+        &state.0, &slug, &name, &base, &surface, &surface_raised, &surface_active,
+        &stroke, &stroke_strong, &content, &content_2, &content_3, &accent, &accent_text,
+    )
+    .await
+    .map_err(db_err)?;
+    audit.log("theme_updated", serde_json::json!({ "slug": slug }));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_theme(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    slug: String,
+) -> Result<(), String> {
+    crate::db::delete_theme(&state.0, &slug)
+        .await
+        .map_err(db_err)?;
+    audit.log("theme_deleted", serde_json::json!({ "slug": slug }));
+    Ok(())
+}
+
 // ── Languages ────────────────────────────────────────────────────────────────
 
 #[tauri::command]

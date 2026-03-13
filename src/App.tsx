@@ -19,7 +19,8 @@ import { useContentTypes } from "./hooks/useContentTypes";
 import { useTheme } from "./hooks/useTheme";
 import { useCollections } from "./hooks/useCollections";
 import { currentOS } from "./hooks/useOS";
-import type { BootstrapData, Category, ClipboardEntry, CollectionRule, ContentRule, ContextRule, Setting } from "./types";
+import type { BootstrapData, Category, ClipboardEntry, CollectionRule, ContentRule, ContextRule, Setting, Theme } from "./types";
+import type { ThemeColors } from "./components/SettingsPanel";
 
 const PANEL_MIN = 180;
 const PANEL_DEFAULT = 320;
@@ -49,7 +50,7 @@ function App() {
 
   // Derive stable values from bootstrap data
   const allSettings = boot?.settings ?? [];
-  const themes      = boot?.themes ?? [];
+  const [themes, setThemes] = useState<Theme[]>([]);
   const languages   = boot?.languages ?? [];
 
   function getSetting(key: string, fallback: string): string {
@@ -86,6 +87,7 @@ function App() {
         const w = parseInt(data.settings.find((s) => s.key === "detail_panel_width")?.value ?? "", 10);
         if (!isNaN(w)) { setPanelWidth(w); panelWidthRef.current = w; }
 
+        setThemes(data.themes);
         setBoot(data);
       })
       .catch(console.error);
@@ -339,6 +341,42 @@ function App() {
     setCollectionRules((prev) => prev.map((r) => r.id === id ? { ...r, enabled } : r));
   }
 
+  // ── Theme CRUD ──────────────────────────────────────────────────────────────
+  function colorsToCamel(c: ThemeColors) {
+    return {
+      base: c.base, surface: c.surface, surfaceRaised: c.surface_raised,
+      surfaceActive: c.surface_active, stroke: c.stroke, strokeStrong: c.stroke_strong,
+      content: c.content, content2: c.content_2, content3: c.content_3,
+      accent: c.accent, accentText: c.accent_text,
+    };
+  }
+
+  async function handleCreateTheme(name: string, colors: ThemeColors) {
+    const slug = name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const theme = await invoke<Theme>("create_theme", { slug, name, ...colorsToCamel(colors) });
+    setThemes((prev) => [...prev, theme]);
+  }
+
+  async function handleUpdateTheme(slug: string, name: string, colors: ThemeColors) {
+    await invoke("update_theme", { slug, name, ...colorsToCamel(colors) });
+    setThemes((prev) => prev.map((t) =>
+      t.slug === slug ? { ...t, name, ...colors } : t
+    ));
+  }
+
+  async function handleDeleteTheme(slug: string) {
+    await invoke("delete_theme", { slug });
+    setThemes((prev) => prev.filter((t) => t.slug !== slug));
+    // If the deleted theme was active, switch to first available
+    if (activeThemeSlug === slug && themes.length > 1) {
+      const fallback = themes.find((t) => t.slug !== slug);
+      if (fallback) {
+        setTheme(fallback.slug);
+        handleSettingChange("active_theme", fallback.slug);
+      }
+    }
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div
@@ -443,6 +481,9 @@ function App() {
             onCreateSubcollection={createSubcollection}
             onRenameSubcollection={renameSubcollection}
             onDeleteSubcollection={removeSubcollection}
+            onCreateTheme={handleCreateTheme}
+            onUpdateTheme={handleUpdateTheme}
+            onDeleteTheme={handleDeleteTheme}
           />
         </div>
       ) : (

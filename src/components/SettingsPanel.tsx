@@ -7,6 +7,35 @@ import { CollectionsManager } from "./CollectionsManager";
 import { ContentTypesManager } from "./ContentTypesManager";
 import { CategoriesManager } from "./CategoriesManager";
 
+export interface ThemeColors {
+  base: string; surface: string; surface_raised: string; surface_active: string;
+  stroke: string; stroke_strong: string; content: string; content_2: string;
+  content_3: string; accent: string; accent_text: string;
+}
+
+const COLOR_SLOTS: { key: keyof ThemeColors; labelKey: string }[] = [
+  { key: "base",           labelKey: "settings.appearance.theme_slot_base" },
+  { key: "surface",        labelKey: "settings.appearance.theme_slot_surface" },
+  { key: "surface_raised", labelKey: "settings.appearance.theme_slot_surface_raised" },
+  { key: "surface_active", labelKey: "settings.appearance.theme_slot_surface_active" },
+  { key: "stroke",         labelKey: "settings.appearance.theme_slot_stroke" },
+  { key: "stroke_strong",  labelKey: "settings.appearance.theme_slot_stroke_strong" },
+  { key: "content",        labelKey: "settings.appearance.theme_slot_content" },
+  { key: "content_2",      labelKey: "settings.appearance.theme_slot_content_2" },
+  { key: "content_3",      labelKey: "settings.appearance.theme_slot_content_3" },
+  { key: "accent",         labelKey: "settings.appearance.theme_slot_accent" },
+  { key: "accent_text",    labelKey: "settings.appearance.theme_slot_accent_text" },
+];
+
+function themeToColors(theme: Theme): ThemeColors {
+  return {
+    base: theme.base, surface: theme.surface, surface_raised: theme.surface_raised,
+    surface_active: theme.surface_active, stroke: theme.stroke, stroke_strong: theme.stroke_strong,
+    content: theme.content, content_2: theme.content_2, content_3: theme.content_3,
+    accent: theme.accent, accent_text: theme.accent_text,
+  };
+}
+
 interface Props {
   settings: Setting[];
   contentTypes: ContentTypeStyle[];
@@ -44,6 +73,9 @@ interface Props {
   onCreateSubcollection: (collectionId: number, name: string) => Promise<Subcollection>;
   onRenameSubcollection: (id: number, name: string) => Promise<void>;
   onDeleteSubcollection: (id: number) => Promise<void>;
+  onCreateTheme: (name: string, colors: ThemeColors) => Promise<void>;
+  onUpdateTheme: (slug: string, name: string, colors: ThemeColors) => Promise<void>;
+  onDeleteTheme: (slug: string) => Promise<void>;
 }
 
 type Tab = "appearance" | "content-types" | "categories" | "collections" | "behavior" | "about";
@@ -85,10 +117,22 @@ export function SettingsPanel({
   onCreateSubcollection,
   onRenameSubcollection,
   onDeleteSubcollection,
+  onCreateTheme,
+  onUpdateTheme,
+  onDeleteTheme,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Theme editor state
+  const [themeEditor, setThemeEditor] = useState<{
+    mode: "create" | "edit";
+    slug?: string;
+    name: string;
+    colors: ThemeColors;
+  } | null>(null);
+  const [themeSaving, setThemeSaving] = useState(false);
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "appearance",    label: t("settings.tabs.appearance") },
@@ -155,38 +199,174 @@ export function SettingsPanel({
         {activeTab === "appearance" && (
           <>
             <Section title={t("settings.appearance.theme_title")} description={t("settings.appearance.theme_desc")}>
-              <div className="grid grid-cols-1 gap-2">
-                {themes.map((theme) => (
-                  <button
-                    key={theme.slug}
-                    onClick={() => onThemeChange(theme.slug)}
-                    className={`flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
-                      activeThemeSlug === theme.slug
-                        ? "border-accent/60 bg-accent/10"
-                        : "border-stroke hover:border-stroke-strong bg-surface"
-                    }`}
-                  >
-                    <div className="flex gap-1 shrink-0">
-                      <div className="w-5 h-8 rounded-sm border border-white/10" style={{ backgroundColor: theme.base }} />
-                      <div className="w-5 h-8 rounded-sm border border-white/10" style={{ backgroundColor: theme.surface }} />
-                      <div className="w-5 h-8 rounded-sm border border-white/10" style={{ backgroundColor: theme.surface_raised }} />
-                      <div className="w-5 h-8 rounded-sm border border-white/10" style={{ backgroundColor: theme.accent }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-content font-medium">{theme.name}</p>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.accent }} />
-                        <span className="text-[10px] text-content-2 font-mono">{theme.accent}</span>
+              {themeEditor ? (
+                <div className="p-4 rounded-lg bg-surface border border-stroke space-y-4">
+                  <div>
+                    <label className="text-xs text-content-2 block mb-1">{t("settings.appearance.theme_name")}</label>
+                    <input
+                      type="text"
+                      value={themeEditor.name}
+                      onChange={(e) => setThemeEditor({ ...themeEditor, name: e.target.value })}
+                      placeholder={t("settings.appearance.theme_name_placeholder")}
+                      className="w-full bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {COLOR_SLOTS.map(({ key, labelKey }) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={themeEditor.colors[key]}
+                          onChange={(e) => setThemeEditor({
+                            ...themeEditor,
+                            colors: { ...themeEditor.colors, [key]: e.target.value },
+                          })}
+                          className="w-8 h-8 rounded border border-stroke cursor-pointer shrink-0 bg-transparent"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs text-content truncate">{t(labelKey)}</p>
+                          <p className="text-[10px] text-content-3 font-mono">{themeEditor.colors[key]}</p>
+                        </div>
                       </div>
-                    </div>
-                    {activeThemeSlug === theme.slug && (
-                      <svg className="w-4 h-4 shrink-0" style={{ color: theme.accent }} fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l3.5 3.5 6.5-7" />
-                      </svg>
-                    )}
+                    ))}
+                  </div>
+
+                  {/* Preview */}
+                  <div className="flex gap-1">
+                    {(["base", "surface", "surface_raised", "surface_active", "stroke", "stroke_strong", "content", "content_2", "content_3", "accent", "accent_text"] as const).map((k) => (
+                      <div key={k} className="flex-1 h-6 rounded-sm border border-white/10" style={{ backgroundColor: themeEditor.colors[k] }} title={k} />
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      disabled={themeSaving || !themeEditor.name.trim()}
+                      onClick={async () => {
+                        setThemeSaving(true);
+                        try {
+                          if (themeEditor.mode === "create") {
+                            await onCreateTheme(themeEditor.name.trim(), themeEditor.colors);
+                          } else {
+                            await onUpdateTheme(themeEditor.slug!, themeEditor.name.trim(), themeEditor.colors);
+                          }
+                          setThemeEditor(null);
+                        } catch (e) {
+                          console.error("[ThemeEditor] save failed:", e);
+                        } finally {
+                          setThemeSaving(false);
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg text-white hover:opacity-90 transition-opacity disabled:opacity-30"
+                      style={{ backgroundColor: themeEditor.colors.accent }}
+                    >
+                      {t("settings.appearance.theme_save")}
+                    </button>
+                    <button
+                      onClick={() => setThemeEditor(null)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg text-content-2 hover:text-content hover:bg-surface-raised transition-colors border border-stroke"
+                    >
+                      {t("settings.appearance.theme_cancel")}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-2">
+                    {themes.map((theme) => (
+                      <div
+                        key={theme.slug}
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                          activeThemeSlug === theme.slug
+                            ? "border-accent/60 bg-accent/10"
+                            : "border-stroke hover:border-stroke-strong bg-surface"
+                        }`}
+                      >
+                        <button
+                          onClick={() => onThemeChange(theme.slug)}
+                          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        >
+                          <div className="flex gap-1 shrink-0">
+                            <div className="w-5 h-8 rounded-sm border border-white/10" style={{ backgroundColor: theme.base }} />
+                            <div className="w-5 h-8 rounded-sm border border-white/10" style={{ backgroundColor: theme.surface }} />
+                            <div className="w-5 h-8 rounded-sm border border-white/10" style={{ backgroundColor: theme.surface_raised }} />
+                            <div className="w-5 h-8 rounded-sm border border-white/10" style={{ backgroundColor: theme.accent }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-content font-medium">{theme.name}</p>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.accent }} />
+                              <span className="text-[10px] text-content-2 font-mono">{theme.accent}</span>
+                            </div>
+                          </div>
+                          {activeThemeSlug === theme.slug && (
+                            <svg className="w-4 h-4 shrink-0" style={{ color: theme.accent }} fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l3.5 3.5 6.5-7" />
+                            </svg>
+                          )}
+                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {/* Duplicate — available on all themes */}
+                          <button
+                            onClick={() => setThemeEditor({
+                              mode: "create",
+                              name: `${theme.name} (copy)`,
+                              colors: themeToColors(theme),
+                            })}
+                            className="p-1 rounded text-content-3 hover:text-content hover:bg-surface-raised transition-colors"
+                            title={t("settings.appearance.duplicate_theme")}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                          {/* Edit + Delete — only for custom themes */}
+                          {!theme.is_builtin && (
+                            <>
+                              <button
+                                onClick={() => setThemeEditor({ mode: "edit", slug: theme.slug, name: theme.name, colors: themeToColors(theme) })}
+                                className="p-1 rounded text-content-3 hover:text-content hover:bg-surface-raised transition-colors"
+                                title={t("settings.appearance.edit_theme")}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => onDeleteTheme(theme.slug)}
+                                className="p-1 rounded text-content-3 hover:text-red-400 hover:bg-surface-raised transition-colors"
+                                title={t("settings.appearance.delete_theme")}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setThemeEditor({
+                      mode: "create",
+                      name: "",
+                      colors: {
+                        base: "#0a0a0a", surface: "#141414", surface_raised: "#1e1e1e", surface_active: "#282828",
+                        stroke: "#2a2a2a", stroke_strong: "#404040", content: "#e5e5e5", content_2: "#a0a0a0",
+                        content_3: "#666666", accent: "#3b82f6", accent_text: "#ffffff",
+                      },
+                    })}
+                    className="mt-2 flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg text-content-2 hover:text-content border border-dashed border-stroke hover:border-stroke-strong transition-colors w-full justify-center"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    {t("settings.appearance.create_theme")}
                   </button>
-                ))}
-              </div>
+                </>
+              )}
             </Section>
 
             {languages.length > 0 && (

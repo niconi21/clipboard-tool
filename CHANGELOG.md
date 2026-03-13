@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(#4): image clipboard support — capture images from the system clipboard, store as PNG files on disk with SHA256 dedup. Thumbnail preview in entry list, full-size display in detail panel. Copy image back to clipboard. Orphaned image files cleaned up on deletion. Configurable `max_image_size_bytes` setting
 - feat(#28): manual content type override — clickable dropdown in DetailPanel header lets users change the content type of any entry. Override is permanent and immediately re-renders content with the appropriate renderer
 - feat(#33): show database file path in About tab — displays full path to `clipboard.db` with a copy-to-clipboard button
+- feat(#31): custom themes — create, edit, and delete custom color themes from Settings > Appearance. 11 color slots with live preview. Custom themes stored in DB with `is_builtin = 0`; builtin themes cannot be modified or deleted
 
 ### Fixed
 - fix(#21): app version in footer and About tab now read dynamically via `getVersion()` — no longer hardcoded

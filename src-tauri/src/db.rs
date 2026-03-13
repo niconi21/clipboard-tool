@@ -998,6 +998,76 @@ pub async fn get_themes(pool: &SqlitePool) -> Result<Vec<Theme>, sqlx::Error> {
     .await
 }
 
+pub async fn create_theme(
+    pool: &SqlitePool,
+    slug: &str,
+    name: &str,
+    base: &str,
+    surface: &str,
+    surface_raised: &str,
+    surface_active: &str,
+    stroke: &str,
+    stroke_strong: &str,
+    content: &str,
+    content_2: &str,
+    content_3: &str,
+    accent: &str,
+    accent_text: &str,
+) -> Result<Theme, sqlx::Error> {
+    sqlx::query_as::<_, Theme>(
+        "INSERT INTO themes (slug, name, base, surface, surface_raised, surface_active,
+                             stroke, stroke_strong, content, content_2, content_3,
+                             accent, accent_text, is_builtin)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13, 0)
+         RETURNING slug, name, base, surface, surface_raised, surface_active,
+                   stroke, stroke_strong, content, content_2, content_3,
+                   accent, accent_text, is_builtin",
+    )
+    .bind(slug).bind(name).bind(base).bind(surface)
+    .bind(surface_raised).bind(surface_active).bind(stroke).bind(stroke_strong)
+    .bind(content).bind(content_2).bind(content_3).bind(accent).bind(accent_text)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn update_theme(
+    pool: &SqlitePool,
+    slug: &str,
+    name: &str,
+    base: &str,
+    surface: &str,
+    surface_raised: &str,
+    surface_active: &str,
+    stroke: &str,
+    stroke_strong: &str,
+    content: &str,
+    content_2: &str,
+    content_3: &str,
+    accent: &str,
+    accent_text: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE themes SET name=?2, base=?3, surface=?4, surface_raised=?5, surface_active=?6,
+                stroke=?7, stroke_strong=?8, content=?9, content_2=?10, content_3=?11,
+                accent=?12, accent_text=?13
+         WHERE slug = ?1 AND is_builtin = 0",
+    )
+    .bind(slug).bind(name).bind(base).bind(surface)
+    .bind(surface_raised).bind(surface_active).bind(stroke).bind(stroke_strong)
+    .bind(content).bind(content_2).bind(content_3).bind(accent).bind(accent_text)
+    .execute(pool)
+    .await
+    .map(|_| ())
+}
+
+pub async fn delete_theme(pool: &SqlitePool, slug: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM themes WHERE slug = ?1 AND is_builtin = 0")
+        .bind(slug)
+        .execute(pool)
+        .await
+        .map(|_| ())
+}
+
 pub async fn get_content_types(pool: &SqlitePool) -> Result<Vec<ContentTypeStyle>, sqlx::Error> {
     sqlx::query_as::<_, ContentTypeStyle>(
         "SELECT name, label, color, is_builtin FROM content_types ORDER BY name ASC",
