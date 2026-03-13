@@ -5,8 +5,8 @@ use crate::audit::AuditLog;
 use crate::categorizer::RulesCache;
 use crate::clipboard::AppCopiedContent;
 use crate::db::{
-    BootstrapData, Category, ClipboardEntry, Collection, ContentRule, ContentTypeStyle, ContextRule, DbState,
-    Language, Setting, Theme,
+    BootstrapData, Category, ClipboardEntry, Collection, ContentRule, ContentTypeStyle,
+    ContextRule, DbState, Language, Setting, Subcollection, Theme,
 };
 
 // ── Error sanitization ────────────────────────────────────────────────────────
@@ -90,6 +90,7 @@ pub async fn get_entries(
     window_title: Option<String>,
     favorite_only: Option<bool>,
     collection_id: Option<i64>,
+    subcollection_id: Option<i64>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<ClipboardEntry>, String> {
@@ -132,11 +133,21 @@ pub async fn get_entries(
         );
     }
     if let Some(cid) = collection_id {
-        conditions.push(format!(
-            "entries.id IN (SELECT entry_id FROM entry_collections WHERE collection_id = ?{})",
-            params.len() + 1
-        ));
-        params.push(cid.to_string());
+        if let Some(sid) = subcollection_id {
+            conditions.push(format!(
+                "entries.id IN (SELECT entry_id FROM entry_collections WHERE collection_id = ?{} AND subcollection_id = ?{})",
+                params.len() + 1,
+                params.len() + 2
+            ));
+            params.push(cid.to_string());
+            params.push(sid.to_string());
+        } else {
+            conditions.push(format!(
+                "entries.id IN (SELECT entry_id FROM entry_collections WHERE collection_id = ?{})",
+                params.len() + 1
+            ));
+            params.push(cid.to_string());
+        }
     }
 
     let where_clause = if conditions.is_empty() {
@@ -459,6 +470,93 @@ pub async fn set_entry_collections(
 #[tauri::command]
 pub async fn get_collection_counts(state: State<'_, DbState>) -> Result<Vec<(i64, i64)>, String> {
     crate::db::get_collection_counts(&state.0).await.map_err(db_err)
+}
+
+// ── Subcollections ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_subcollections(
+    state: State<'_, DbState>,
+    collection_id: i64,
+) -> Result<Vec<Subcollection>, String> {
+    crate::db::get_subcollections(&state.0, collection_id)
+        .await
+        .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn create_subcollection(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    collection_id: i64,
+    name: String,
+) -> Result<Subcollection, String> {
+    audited_validate(&audit, validate_name(&name), "create_subcollection", "name")?;
+    let sub = crate::db::create_subcollection(&state.0, collection_id, &name)
+        .await
+        .map_err(db_err)?;
+    audit.log("subcollection_created", serde_json::json!({ "collection_id": collection_id, "name": name }));
+    Ok(sub)
+}
+
+#[tauri::command]
+pub async fn rename_subcollection(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    id: i64,
+    name: String,
+) -> Result<(), String> {
+    audited_validate(&audit, validate_name(&name), "rename_subcollection", "name")?;
+    crate::db::rename_subcollection(&state.0, id, &name)
+        .await
+        .map_err(db_err)?;
+    audit.log("subcollection_renamed", serde_json::json!({ "id": id, "name": name }));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_subcollection(
+    state: State<'_, DbState>,
+    audit: State<'_, AuditLog>,
+    id: i64,
+) -> Result<(), String> {
+    crate::db::delete_subcollection(&state.0, id)
+        .await
+        .map_err(db_err)?;
+    audit.log("subcollection_deleted", serde_json::json!({ "id": id }));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_subcollection_counts(
+    state: State<'_, DbState>,
+    collection_id: i64,
+) -> Result<Vec<(i64, i64)>, String> {
+    crate::db::get_subcollection_counts(&state.0, collection_id)
+        .await
+        .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn move_entry_subcollection(
+    state: State<'_, DbState>,
+    entry_id: i64,
+    collection_id: i64,
+    subcollection_id: i64,
+) -> Result<(), String> {
+    crate::db::move_entry_subcollection(&state.0, entry_id, collection_id, subcollection_id)
+        .await
+        .map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn get_entry_subcollection_ids(
+    state: State<'_, DbState>,
+    entry_id: i64,
+) -> Result<Vec<(i64, i64)>, String> {
+    crate::db::get_entry_subcollection_ids(&state.0, entry_id)
+        .await
+        .map_err(db_err)
 }
 
 // ── Content Types CRUD ────────────────────────────────────────────────────────

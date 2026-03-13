@@ -11,6 +11,7 @@ import { SearchBar } from "./components/SearchBar";
 import { EntryList } from "./components/EntryList";
 import { DetailPanel } from "./components/DetailPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { SubcollectionPanel } from "./components/SubcollectionPanel";
 import { WindowControls } from "./components/WindowControls";
 import { useClipboard, EMPTY_FILTERS } from "./hooks/useClipboard";
 import type { ClipboardFilters } from "./hooks/useClipboard";
@@ -33,6 +34,7 @@ function App() {
   const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "favorites" | number>("all");
+  const [activeSubcollection, setActiveSubcollection] = useState<number | null>(null);
   const [counts, setCounts] = useState<{ all: number; favorites: number }>({ all: 0, favorites: 0 });
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const { t } = useTranslation();
@@ -64,6 +66,7 @@ function App() {
     () => boot ? {
       collections: boot.collections,
       counts: Object.fromEntries(boot.collection_counts.map(([id, n]) => [id, n])),
+      subcollections: boot.subcollections,
     } : undefined,
     [boot],
   );
@@ -91,11 +94,22 @@ function App() {
   // ── Hooks — only fetch if not seeded from bootstrap ─────────────────────────
   const { contentTypes, colorFor, labelFor, refresh: refreshContentTypes } = useContentTypes(initialContentTypes);
   const { activeTheme, setTheme } = useTheme(themes, activeThemeSlug);
-  const { collections, userCollections, counts: collectionCounts, create: createCollection, update: updateCollection, remove: removeCollection, refreshCounts: refreshCollectionCounts } = useCollections(initialCollections);
+  const {
+    collections, userCollections, counts: collectionCounts, subcollections,
+    create: createCollection, update: updateCollection, remove: removeCollection, refreshCounts: refreshCollectionCounts,
+    subcollectionsFor, createSubcollection, renameSubcollection, removeSubcollection,
+  } = useCollections(initialCollections);
+  // Derive the active collection id (for favorites, use the builtin collection)
+  const favoritesId = collections.find((c) => c.is_builtin)?.id ?? null;
+  const activeCollectionId = activeTab === "favorites" ? favoritesId : (typeof activeTab === "number" ? activeTab : null);
+  const [subCountKey, setSubCountKey] = useState(0);
+  const bumpSubCounts = useCallback(() => setSubCountKey((k) => k + 1), []);
+
   const { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias } = useClipboard(
     search, filters, pageSize,
     activeTab === "favorites",
-    typeof activeTab === "number" ? activeTab : null,
+    activeCollectionId,
+    activeSubcollection,
     ready, // don't fetch until bootstrap resolved
   );
 
@@ -169,11 +183,11 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    listen("clipboard-new-entry", () => { if (!cancelled) { loadCounts(); refreshCollectionCounts(); } })
+    listen("clipboard-new-entry", () => { if (!cancelled) { loadCounts(); refreshCollectionCounts(); bumpSubCounts(); } })
       .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
       .catch(console.error);
     return () => { cancelled = true; unlisten?.(); };
-  }, [loadCounts, refreshCollectionCounts]);
+  }, [loadCounts, refreshCollectionCounts, bumpSubCounts]);
 
   // ── Settings panel — lazy load, cached after first open ──────────────────────
   const [categories, setCategories] = useState<Category[]>([]);
@@ -195,6 +209,7 @@ function App() {
   // ── Handlers ─────────────────────────────────────────────────────────────────
   function handleTabChange(tab: "all" | "favorites" | number) {
     setActiveTab(tab);
+    setActiveSubcollection(null);
     setSelectedEntry(null);
   }
 
@@ -205,7 +220,7 @@ function App() {
   function handleDelete(id: number) {
     if (selectedEntry?.id === id) setSelectedEntry(null);
     removeEntry(id)
-      .then(() => { loadCounts(); refreshCollectionCounts(); })
+      .then(() => { loadCounts(); refreshCollectionCounts(); bumpSubCounts(); })
       .catch((e: unknown) => {
         let msg: string;
         if (typeof e === "string" && e.startsWith("ENTRY_IN_COLLECTION:")) {
@@ -222,6 +237,8 @@ function App() {
   function handleToggleFavorite(id: number) {
     toggleFavorite(id);
     loadCounts();
+    refreshCollectionCounts();
+    bumpSubCounts();
   }
 
   const handleCopy = useCallback((content: string) => {
@@ -418,6 +435,10 @@ function App() {
             onCreateCollectionRule={handleCreateCollectionRule}
             onDeleteCollectionRule={handleDeleteCollectionRule}
             onToggleCollectionRule={handleToggleCollectionRule}
+            subcollections={subcollections}
+            onCreateSubcollection={createSubcollection}
+            onRenameSubcollection={renameSubcollection}
+            onDeleteSubcollection={removeSubcollection}
           />
         </div>
       ) : (
@@ -465,6 +486,18 @@ function App() {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden" ref={containerRef}>
+        {activeCollectionId !== null && (
+          <SubcollectionPanel
+            collectionId={activeCollectionId}
+            subcollections={subcollectionsFor(activeCollectionId)}
+            activeSubcollection={activeSubcollection}
+            refreshKey={subCountKey}
+            onSelect={setActiveSubcollection}
+            onCreate={createSubcollection}
+            onRename={renameSubcollection}
+            onDelete={removeSubcollection}
+          />
+        )}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           <EntryList
             entries={entries}
@@ -494,11 +527,13 @@ function App() {
               <DetailPanel
                 entry={selectedEntry}
                 collections={collections}
+                subcollections={subcollections}
                 colorFor={colorFor}
                 labelFor={labelFor}
                 onClose={() => setSelectedEntry(null)}
                 onCollectionChanged={(entryId, collectionIds) => {
               refreshCollectionCounts();
+              bumpSubCounts();
               loadCounts();
               patchEntryCollections(entryId, collectionIds);
             }}

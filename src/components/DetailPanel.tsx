@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import type { ClipboardEntry, Collection } from "../types";
+import type { ClipboardEntry, Collection, Subcollection } from "../types";
 import { ContentRenderer } from "./ContentRenderer";
 import { CollectionSelector } from "./CollectionSelector";
 import { timeAgo } from "../utils/time";
@@ -9,6 +9,7 @@ import { timeAgo } from "../utils/time";
 interface Props {
   entry: ClipboardEntry;
   collections: Collection[];
+  subcollections: Subcollection[];
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
   onClose: () => void;
@@ -24,7 +25,7 @@ async function copyEntry(content: string) {
   }
 }
 
-export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, onCollectionChanged, onAliasChanged }: Props) {
+export function DetailPanel({ entry, collections, subcollections, colorFor, labelFor, onClose, onCollectionChanged, onAliasChanged }: Props) {
   const { t } = useTranslation();
   const color = colorFor(entry.content_type);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -223,6 +224,7 @@ export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, o
             <CollectionSelector
               entryId={entry.id}
               collections={collections}
+              subcollections={subcollections}
               onChanged={(ids) => onCollectionChanged?.(entry.id, ids)}
             />
           </div>

@@ -71,6 +71,14 @@ export interface Collection {
   created_at: string;
 }
 
+export interface Subcollection {
+  id: number;
+  collection_id: number;
+  name: string;
+  is_default: boolean;
+  created_at: string;
+}
+
 export interface Setting {
   key: string;
   value: string;
@@ -90,6 +98,7 @@ export interface BootstrapData {
   content_types:     ContentTypeStyle[];
   collections:       Collection[];
   collection_counts: [number, number][]; // [collection_id, count][]
+  subcollections:    Subcollection[];
   languages:         Language[];
   entry_counts:      [number, number];   // [all, favorites]
 }

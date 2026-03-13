@@ -200,6 +200,16 @@
     "delete_error_fallback": "Could not delete entry.",
     "delete_error_in_collection": "Entry belongs to collection(s): {{names}}. Remove it from all collections before deleting."
   },
+  "subcollections": {
+    "all": "All",
+    "default_name": "Unclassified",
+    "title": "Subcollections",
+    "create_placeholder": "Subcollection name…",
+    "rename_placeholder": "New name…",
+    "delete_confirm": "Delete subcollection? Entries will move to the default.",
+    "count_one": "{{count}} entry",
+    "count_other": "{{count}} entries"
+  },
   "about": {
     "description": "Local-only clipboard manager. No cloud sync, no telemetry.",
     "version_label": "Version",

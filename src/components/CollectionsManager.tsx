@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Collection, CollectionRule, ContentTypeStyle } from "../types";
+import type { Collection, CollectionRule, ContentTypeStyle, Subcollection } from "../types";
 import { ColorPicker } from "./ColorPicker";
 import { BuiltinBadge } from "./BuiltinBadge";
 import { TypeaheadSelect } from "./TypeaheadSelect";
@@ -12,6 +12,7 @@ interface Props {
   contentTypes: ContentTypeStyle[];
   counts: Record<number, number>;
   collectionRules: CollectionRule[];
+  subcollections: Subcollection[];
   onCreate: (name: string, color: string) => Promise<void>;
   onUpdate: (id: number, name: string, color: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -25,12 +26,16 @@ interface Props {
   ) => Promise<void>;
   onDeleteRule: (id: number) => Promise<void>;
   onToggleRule: (id: number, enabled: boolean) => Promise<void>;
+  onCreateSubcollection: (collectionId: number, name: string) => Promise<Subcollection>;
+  onRenameSubcollection: (id: number, name: string) => Promise<void>;
+  onDeleteSubcollection: (id: number) => Promise<void>;
 }
 
 export function CollectionsManager({
-  collections, contentTypes, counts, collectionRules,
+  collections, contentTypes, counts, collectionRules, subcollections,
   onCreate, onUpdate, onDelete,
   onCreateRule, onDeleteRule, onToggleRule,
+  onCreateSubcollection, onRenameSubcollection, onDeleteSubcollection,
 }: Props) {
   const { t } = useTranslation();
   const [newName, setNewName] = useState("");
@@ -44,13 +49,45 @@ export function CollectionsManager({
   const [newContentType, setNewContentType] = useState("");
   const [newContentPattern, setNewContentPattern] = useState("");
 
+  // Subcollection form state
+  const [newSubName, setNewSubName] = useState("");
+  const [editingSubId, setEditingSubId] = useState<number | null>(null);
+  const [editSubName, setEditSubName] = useState("");
+
   useEffect(() => {
     setNewContentType("");
     setNewContentPattern("");
+    setNewSubName("");
+    setEditingSubId(null);
   }, [expandedId]);
 
   function rulesFor(collectionId: number) {
     return collectionRules.filter((r) => r.collection_id === collectionId);
+  }
+
+  function subsFor(collectionId: number) {
+    return subcollections
+      .filter((s) => s.collection_id === collectionId)
+      .sort((a, b) => (a.is_default ? -1 : b.is_default ? 1 : a.created_at.localeCompare(b.created_at)));
+  }
+
+  function subDisplayName(sub: { is_default: boolean; name: string }) {
+    return sub.is_default ? t("subcollections.default_name") : sub.name;
+  }
+
+  async function handleCreateSub(collectionId: number) {
+    const name = newSubName.trim();
+    if (!name) return;
+    await onCreateSubcollection(collectionId, name);
+    setNewSubName("");
+  }
+
+  async function handleRenameSub() {
+    if (editingSubId === null) return;
+    const name = editSubName.trim();
+    if (!name) return;
+    await onRenameSubcollection(editingSubId, name);
+    setEditingSubId(null);
   }
 
   async function handleCreate() {
@@ -173,6 +210,72 @@ export function CollectionsManager({
                     <ColorPicker size="sm" value={col.color} onChange={(c) => onUpdate(col.id, col.name, c)} />
                   </div>
                 )}
+                {/* Subcollections */}
+                <p className="text-[10px] text-content-3 uppercase tracking-wide font-medium">
+                  {t("subcollections.title")}
+                </p>
+                <div className="space-y-1 pb-2 border-b border-stroke/50">
+                  {subsFor(col.id).map((sub) => (
+                    <div key={sub.id} className="flex items-center gap-2 group">
+                      {editingSubId === sub.id ? (
+                        <input
+                          autoFocus
+                          value={editSubName}
+                          onChange={(e) => setEditSubName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleRenameSub(); if (e.key === "Escape") setEditingSubId(null); }}
+                          onBlur={handleRenameSub}
+                          className="flex-1 bg-surface-raised border border-stroke rounded px-2 py-0.5 text-[11px] text-content focus:outline-none focus:border-accent"
+                        />
+                      ) : (
+                        <span className="flex-1 text-[11px] text-content-2 truncate">
+                          {subDisplayName(sub)}
+                          {sub.is_default && (
+                            <span className="ml-1 text-[9px] text-content-3 uppercase">(default)</span>
+                          )}
+                        </span>
+                      )}
+                      {!sub.is_default && editingSubId !== sub.id && (
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => { setEditingSubId(sub.id); setEditSubName(sub.name); }}
+                            className="p-0.5 rounded text-content-3 hover:text-content-2 transition-colors"
+                            title={t("common.edit")}
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => onDeleteSubcollection(sub.id)}
+                            className="p-0.5 rounded text-content-3 hover:text-danger transition-colors"
+                            title={t("common.delete")}
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <input
+                      placeholder={t("subcollections.create_placeholder")}
+                      value={newSubName}
+                      onChange={(e) => setNewSubName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleCreateSub(col.id); }}
+                      className="flex-1 bg-surface-raised border border-stroke rounded px-2 py-0.5 text-[11px] text-content placeholder:text-content-3 focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      onClick={() => handleCreateSub(col.id)}
+                      disabled={!newSubName.trim()}
+                      className="px-2 py-0.5 rounded bg-accent/20 text-accent text-[11px] font-medium hover:bg-accent/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                    >
+                      {t("common.add")}
+                    </button>
+                  </div>
+                </div>
+
                 <p className="text-[10px] text-content-3 uppercase tracking-wide font-medium">
                   {t("collections_mgr.rules_title")}
                 </p>

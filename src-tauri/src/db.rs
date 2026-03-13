@@ -40,6 +40,15 @@ pub struct Collection {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct Subcollection {
+    pub id: i64,
+    pub collection_id: i64,
+    pub name: String,
+    pub is_default: bool,
+    pub created_at: String,
+}
+
 /// Context-based rule: matches on source_app / window_title to assign a category.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, FromRow)]
 pub struct ContextRule {
@@ -121,6 +130,7 @@ pub struct BootstrapData {
     pub content_types:     Vec<ContentTypeStyle>,
     pub collections:       Vec<Collection>,
     pub collection_counts: Vec<(i64, i64)>,
+    pub subcollections:    Vec<Subcollection>,
     pub languages:         Vec<Language>,
     pub entry_counts:      (i64, i64),
 }
@@ -190,14 +200,59 @@ pub const IS_FAVORITE_SQL: &str = "EXISTS(
 
 // ── Migrations ────────────────────────────────────────────────────────────────
 
+/// Swallows "duplicate column name" errors from ALTER TABLE ADD COLUMN.
+/// Any other error is propagated.
+fn ignore_duplicate_column(
+    result: Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error>,
+) -> Result<(), sqlx::Error> {
+    match result {
+        Ok(_) => Ok(()),
+        Err(sqlx::Error::Database(ref e)) if e.message().contains("duplicate column name") => {
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     create_fresh_schema(pool).await?;
 
     // Idempotent column additions for existing databases.
     // "duplicate column name" error means it's already there — safe to ignore.
-    let _ = sqlx::query("ALTER TABLE entries ADD COLUMN alias TEXT")
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE entries ADD COLUMN alias TEXT")
+            .execute(pool)
+            .await,
+    )?;
+
+    // Subcollections: add subcollection_id column to entry_collections (existing DBs)
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE entry_collections ADD COLUMN subcollection_id INTEGER REFERENCES subcollections(id)")
+            .execute(pool)
+            .await,
+    )?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_ec_subcollection ON entry_collections(subcollection_id)")
         .execute(pool)
-        .await;
+        .await?;
+
+    // Seed default subcollection for every collection that doesn't have one yet
+    sqlx::query(
+        "INSERT OR IGNORE INTO subcollections (collection_id, name, is_default)
+         SELECT id, 'Sin clasificar', 1 FROM collections
+         WHERE id NOT IN (SELECT collection_id FROM subcollections WHERE is_default = 1)"
+    )
+    .execute(pool)
+    .await?;
+
+    // Backfill: assign default subcollection to entry_collections rows missing one
+    sqlx::query(
+        "UPDATE entry_collections SET subcollection_id = (
+            SELECT s.id FROM subcollections s
+            WHERE s.collection_id = entry_collections.collection_id AND s.is_default = 1
+        ) WHERE subcollection_id IS NULL"
+    )
+    .execute(pool)
+    .await?;
 
     // FK dependency order:
     //   categories      → before context_rules (context_rules.category_id)
@@ -288,14 +343,36 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .await?;
 
     sqlx::query(
-        "CREATE TABLE IF NOT EXISTS entry_collections (
-            entry_id      INTEGER NOT NULL REFERENCES entries(id)     ON DELETE CASCADE,
+        "CREATE TABLE IF NOT EXISTS subcollections (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
             collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+            name          TEXT    NOT NULL,
+            is_default    INTEGER NOT NULL DEFAULT 0,
+            created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(collection_id, name)
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_subcollections_collection ON subcollections(collection_id)")
+        .execute(pool)
+        .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS entry_collections (
+            entry_id          INTEGER NOT NULL REFERENCES entries(id)          ON DELETE CASCADE,
+            collection_id     INTEGER NOT NULL REFERENCES collections(id)      ON DELETE CASCADE,
+            subcollection_id  INTEGER REFERENCES subcollections(id),
             PRIMARY KEY (entry_id, collection_id)
         )",
     )
     .execute(pool)
     .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_ec_subcollection ON entry_collections(subcollection_id)")
+        .execute(pool)
+        .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS context_rules (
@@ -391,8 +468,10 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     //
     // Step 1: re-point entries from duplicate Favorites ids to the canonical (MIN) id
     sqlx::query(
-        "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id)
-         SELECT entry_id, (SELECT MIN(id) FROM collections WHERE is_builtin = 1 AND name = 'Favorites')
+        "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id, subcollection_id)
+         SELECT entry_id,
+                (SELECT MIN(id) FROM collections WHERE is_builtin = 1 AND name = 'Favorites'),
+                subcollection_id
          FROM entry_collections
          WHERE collection_id IN (
              SELECT id FROM collections
@@ -408,6 +487,15 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         "DELETE FROM collections
          WHERE is_builtin = 1 AND name = 'Favorites'
          AND id != (SELECT MIN(id) FROM collections WHERE is_builtin = 1 AND name = 'Favorites')",
+    )
+    .execute(pool)
+    .await?;
+
+    // Seed default subcollection for the builtin Favorites collection
+    sqlx::query(
+        "INSERT OR IGNORE INTO subcollections (collection_id, name, is_default)
+         SELECT id, 'Sin clasificar', 1 FROM collections
+         WHERE id NOT IN (SELECT collection_id FROM subcollections WHERE is_default = 1)",
     )
     .execute(pool)
     .await?;
@@ -811,9 +899,11 @@ pub async fn toggle_collection_rule(pool: &SqlitePool, id: i64, enabled: bool) -
 }
 
 pub async fn add_entry_to_collection(pool: &SqlitePool, entry_id: i64, collection_id: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT OR IGNORE INTO entry_collections (entry_id, collection_id) VALUES (?1, ?2)")
+    let default_sub = get_default_subcollection_id(pool, collection_id).await?;
+    sqlx::query("INSERT OR IGNORE INTO entry_collections (entry_id, collection_id, subcollection_id) VALUES (?1, ?2, ?3)")
         .bind(entry_id)
         .bind(collection_id)
+        .bind(default_sub)
         .execute(pool)
         .await?;
     Ok(())
@@ -1045,7 +1135,7 @@ pub async fn create_collection(
     name: &str,
     color: &str,
 ) -> Result<Collection, sqlx::Error> {
-    sqlx::query_as::<_, Collection>(
+    let col = sqlx::query_as::<_, Collection>(
         "INSERT INTO collections (name, color)
          VALUES (?1, ?2)
          RETURNING id, name, color, is_builtin, created_at",
@@ -1053,7 +1143,17 @@ pub async fn create_collection(
     .bind(name)
     .bind(color)
     .fetch_one(pool)
-    .await
+    .await?;
+
+    // Auto-create default subcollection
+    sqlx::query(
+        "INSERT INTO subcollections (collection_id, name, is_default) VALUES (?1, 'Sin clasificar', 1)",
+    )
+    .bind(col.id)
+    .execute(pool)
+    .await?;
+
+    Ok(col)
 }
 
 pub async fn update_collection(
@@ -1105,11 +1205,18 @@ pub async fn toggle_favorite(pool: &SqlitePool, entry_id: i64) -> Result<bool, s
         )
         .fetch_one(&mut *tx)
         .await?;
+        let (default_sub,): (i64,) = sqlx::query_as(
+            "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+        )
+        .bind(cid)
+        .fetch_one(&mut *tx)
+        .await?;
         sqlx::query(
-            "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id) VALUES (?1, ?2)",
+            "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id, subcollection_id) VALUES (?1, ?2, ?3)",
         )
         .bind(entry_id)
         .bind(cid)
+        .bind(default_sub)
         .execute(&mut *tx)
         .await?;
         true
@@ -1134,6 +1241,7 @@ pub async fn get_entry_collection_ids(
 }
 
 /// Replaces all collection memberships for an entry with the given ids.
+/// New collections get the default subcollection; existing ones preserve their subcollection.
 pub async fn set_entry_collections(
     pool: &SqlitePool,
     entry_id: i64,
@@ -1141,17 +1249,41 @@ pub async fn set_entry_collections(
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
+    // Snapshot current subcollection assignments so we can preserve them
+    let existing: Vec<(i64, Option<i64>)> = sqlx::query_as(
+        "SELECT collection_id, subcollection_id FROM entry_collections WHERE entry_id = ?1",
+    )
+    .bind(entry_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let existing_map: std::collections::HashMap<i64, Option<i64>> =
+        existing.into_iter().collect();
+
     sqlx::query("DELETE FROM entry_collections WHERE entry_id = ?1")
         .bind(entry_id)
         .execute(&mut *tx)
         .await?;
 
     for &cid in collection_ids {
+        let sub_id = if let Some(&Some(sid)) = existing_map.get(&cid) {
+            // Preserve existing subcollection assignment
+            sid
+        } else {
+            // Resolve default subcollection for this collection
+            let (sid,): (i64,) = sqlx::query_as(
+                "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+            )
+            .bind(cid)
+            .fetch_one(&mut *tx)
+            .await?;
+            sid
+        };
         sqlx::query(
-            "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id) VALUES (?1, ?2)",
+            "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id, subcollection_id) VALUES (?1, ?2, ?3)",
         )
         .bind(entry_id)
         .bind(cid)
+        .bind(sub_id)
         .execute(&mut *tx)
         .await?;
     }
@@ -1165,6 +1297,156 @@ pub async fn get_collection_counts(pool: &SqlitePool) -> Result<Vec<(i64, i64)>,
     let rows: Vec<(i64, i64)> = sqlx::query_as(
         "SELECT collection_id, COUNT(*) FROM entry_collections GROUP BY collection_id",
     )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+// ── Subcollections ────────────────────────────────────────────────────────────
+
+pub async fn get_all_subcollections(pool: &SqlitePool) -> Result<Vec<Subcollection>, sqlx::Error> {
+    sqlx::query_as::<_, Subcollection>(
+        "SELECT id, collection_id, name, is_default, created_at
+         FROM subcollections
+         ORDER BY is_default DESC, created_at ASC",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_subcollections(pool: &SqlitePool, collection_id: i64) -> Result<Vec<Subcollection>, sqlx::Error> {
+    sqlx::query_as::<_, Subcollection>(
+        "SELECT id, collection_id, name, is_default, created_at
+         FROM subcollections
+         WHERE collection_id = ?1
+         ORDER BY is_default DESC, created_at ASC",
+    )
+    .bind(collection_id)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn create_subcollection(
+    pool: &SqlitePool,
+    collection_id: i64,
+    name: &str,
+) -> Result<Subcollection, sqlx::Error> {
+    sqlx::query_as::<_, Subcollection>(
+        "INSERT INTO subcollections (collection_id, name, is_default)
+         VALUES (?1, ?2, 0)
+         RETURNING id, collection_id, name, is_default, created_at",
+    )
+    .bind(collection_id)
+    .bind(name)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn rename_subcollection(
+    pool: &SqlitePool,
+    id: i64,
+    name: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE subcollections SET name = ?1 WHERE id = ?2 AND is_default = 0")
+        .bind(name)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map(|_| ())
+}
+
+pub async fn delete_subcollection(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    // Fetch the subcollection to guard: must not be default
+    let row: Option<(i64, bool)> = sqlx::query_as(
+        "SELECT collection_id, is_default FROM subcollections WHERE id = ?1",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let (collection_id, is_default) = match row {
+        Some(r) => r,
+        None => return Ok(()),
+    };
+
+    if is_default {
+        return Ok(()); // Cannot delete default subcollection
+    }
+
+    // Move entries to the default subcollection before deleting
+    let (default_id,): (i64,) = sqlx::query_as(
+        "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+    )
+    .bind(collection_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query("UPDATE entry_collections SET subcollection_id = ?1 WHERE subcollection_id = ?2")
+        .bind(default_id)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM subcollections WHERE id = ?1 AND is_default = 0")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn get_default_subcollection_id(pool: &SqlitePool, collection_id: i64) -> Result<i64, sqlx::Error> {
+    let (id,): (i64,) = sqlx::query_as(
+        "SELECT id FROM subcollections WHERE collection_id = ?1 AND is_default = 1",
+    )
+    .bind(collection_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn get_subcollection_counts(pool: &SqlitePool, collection_id: i64) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    let rows: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT subcollection_id, COUNT(*) FROM entry_collections
+         WHERE collection_id = ?1 AND subcollection_id IS NOT NULL
+         GROUP BY subcollection_id",
+    )
+    .bind(collection_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn move_entry_subcollection(
+    pool: &SqlitePool,
+    entry_id: i64,
+    collection_id: i64,
+    subcollection_id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE entry_collections SET subcollection_id = ?1
+         WHERE entry_id = ?2 AND collection_id = ?3",
+    )
+    .bind(subcollection_id)
+    .bind(entry_id)
+    .bind(collection_id)
+    .execute(pool)
+    .await
+    .map(|_| ())
+}
+
+/// Returns (collection_id, subcollection_id) pairs for an entry.
+pub async fn get_entry_subcollection_ids(
+    pool: &SqlitePool,
+    entry_id: i64,
+) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    let rows: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT collection_id, COALESCE(subcollection_id, 0) FROM entry_collections WHERE entry_id = ?1",
+    )
+    .bind(entry_id)
     .fetch_all(pool)
     .await?;
     Ok(rows)
@@ -1407,6 +1689,7 @@ pub async fn bootstrap_data(pool: &SqlitePool) -> Result<BootstrapData, sqlx::Er
     let content_types     = get_content_types(pool).await?;
     let collections       = get_collections(pool).await?;
     let collection_counts = get_collection_counts(pool).await?;
+    let subcollections    = get_all_subcollections(pool).await?;
     let languages         = get_languages(pool).await?;
     let entry_counts      = get_entry_counts(pool).await?;
     Ok(BootstrapData {
@@ -1415,6 +1698,7 @@ pub async fn bootstrap_data(pool: &SqlitePool) -> Result<BootstrapData, sqlx::Er
         content_types,
         collections,
         collection_counts,
+        subcollections,
         languages,
         entry_counts,
     })

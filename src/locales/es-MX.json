@@ -200,6 +200,16 @@
     "delete_error_fallback": "No se pudo eliminar la entrada.",
     "delete_error_in_collection": "La entrada pertenece a la(s) colección(es): {{names}}. Quítala de todas las colecciones antes de eliminarla."
   },
+  "subcollections": {
+    "all": "Todas",
+    "default_name": "Sin clasificar",
+    "title": "Subcolecciones",
+    "create_placeholder": "Nombre de subcolección…",
+    "rename_placeholder": "Nuevo nombre…",
+    "delete_confirm": "¿Eliminar subcolección? Las entradas se moverán a la predeterminada.",
+    "count_one": "{{count}} entrada",
+    "count_other": "{{count}} entradas"
+  },
   "about": {
     "description": "Gestor de portapapeles local. Sin sincronización en la nube ni telemetría.",
     "version_label": "Versión",

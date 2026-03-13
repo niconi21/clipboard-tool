@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useTranslation, Trans } from "react-i18next";
-import type { Category, Collection, CollectionRule, ContentRule, ContentTypeStyle, ContextRule, Language, Setting, Theme } from "../types";
+import type { Category, Collection, CollectionRule, ContentRule, ContentTypeStyle, ContextRule, Language, Setting, Subcollection, Theme } from "../types";
 import { CollectionsManager } from "./CollectionsManager";
 import { ContentTypesManager } from "./ContentTypesManager";
 import { CategoriesManager } from "./CategoriesManager";
@@ -39,6 +39,10 @@ interface Props {
   onCreateCollectionRule: (collectionId: number, contentType: string | null, sourceApp: string | null, windowTitle: string | null, contentPattern: string | null, priority: number) => Promise<void>;
   onDeleteCollectionRule: (id: number) => Promise<void>;
   onToggleCollectionRule: (id: number, enabled: boolean) => Promise<void>;
+  subcollections: Subcollection[];
+  onCreateSubcollection: (collectionId: number, name: string) => Promise<Subcollection>;
+  onRenameSubcollection: (id: number, name: string) => Promise<void>;
+  onDeleteSubcollection: (id: number) => Promise<void>;
 }
 
 type Tab = "appearance" | "content-types" | "categories" | "collections" | "behavior" | "about";
@@ -76,6 +80,10 @@ export function SettingsPanel({
   onCreateCollectionRule,
   onDeleteCollectionRule,
   onToggleCollectionRule,
+  subcollections,
+  onCreateSubcollection,
+  onRenameSubcollection,
+  onDeleteSubcollection,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
@@ -258,12 +266,16 @@ export function SettingsPanel({
               contentTypes={contentTypes}
               counts={collectionCounts}
               collectionRules={collectionRules}
+              subcollections={subcollections}
               onCreate={onCreateCollection}
               onUpdate={onUpdateCollection}
               onDelete={onDeleteCollection}
               onCreateRule={onCreateCollectionRule}
               onDeleteRule={onDeleteCollectionRule}
               onToggleRule={onToggleCollectionRule}
+              onCreateSubcollection={onCreateSubcollection}
+              onRenameSubcollection={onRenameSubcollection}
+              onDeleteSubcollection={onDeleteSubcollection}
             />
           </Section>
         )}

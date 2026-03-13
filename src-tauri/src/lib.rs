@@ -192,6 +192,13 @@ pub fn run() {
             commands::create_collection_rule,
             commands::delete_collection_rule,
             commands::toggle_collection_rule,
+            commands::get_subcollections,
+            commands::create_subcollection,
+            commands::rename_subcollection,
+            commands::delete_subcollection,
+            commands::get_subcollection_counts,
+            commands::move_entry_subcollection,
+            commands::get_entry_subcollection_ids,
         ])
         .on_window_event(|window, event| {
             let app = window.app_handle();

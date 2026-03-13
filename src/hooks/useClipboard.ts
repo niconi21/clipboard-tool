@@ -17,7 +17,7 @@ export const EMPTY_FILTERS: ClipboardFilters = {
   windowTitle: "",
 };
 
-export function useClipboard(search: string, filters: ClipboardFilters, pageSize = 50, favoriteOnly = false, collectionId: number | null = null, enabled = true) {
+export function useClipboard(search: string, filters: ClipboardFilters, pageSize = 50, favoriteOnly = false, collectionId: number | null = null, subcollectionId: number | null = null, enabled = true) {
   const [entries, setEntries] = useState<ClipboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -36,10 +36,11 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
       windowTitle: filters.windowTitle || null,
       favoriteOnly: favoriteOnly || null,
       collectionId: collectionId ?? null,
+      subcollectionId: subcollectionId ?? null,
       limit: pageSize,
       offset,
     });
-  }, [search, filters.contentType, filters.sourceApp, filters.category, filters.windowTitle, favoriteOnly, collectionId, pageSize]);
+  }, [search, filters.contentType, filters.sourceApp, filters.category, filters.windowTitle, favoriteOnly, collectionId, subcollectionId, pageSize]);
 
   // Reset and load first page whenever search/filters change
   const load = useCallback(async () => {
