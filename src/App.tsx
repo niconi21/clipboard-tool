@@ -41,6 +41,10 @@ function App() {
   const [boot, setBoot] = useState<BootstrapData | null>(null);
   const ready = boot !== null;
 
+  // ── Settings state — managed in App ─────────────────────────────────────────
+  const [localSettings, setLocalSettings] = useState<Setting[]>([]);
+  const settingsLoadedRef = useRef(false);
+
   // Derive stable values from bootstrap data
   const allSettings = boot?.settings ?? [];
   const themes      = boot?.themes ?? [];
@@ -49,7 +53,9 @@ function App() {
   function getSetting(key: string, fallback: string): string {
     return allSettings.find((s) => s.key === key)?.value ?? fallback;
   }
-  const activeThemeSlug = getSetting("active_theme", "midnight");
+  const activeThemeSlug =
+    localSettings.find((s) => s.key === "active_theme")?.value ??
+    getSetting("active_theme", "midnight");
   const pageSize        = parseInt(getSetting("page_size", "50"), 10) || 50;
 
   // Memoize initial data objects so hook effects only fire once per bootstrap
@@ -92,10 +98,6 @@ function App() {
     typeof activeTab === "number" ? activeTab : null,
     ready, // don't fetch until bootstrap resolved
   );
-
-  // ── Settings state — managed in App ─────────────────────────────────────────
-  const [localSettings, setLocalSettings] = useState<Setting[]>([]);
-  const settingsLoadedRef = useRef(false);
 
   // ── Panel resize ─────────────────────────────────────────────────────────────
   const containerRef    = useRef<HTMLDivElement>(null);
@@ -373,7 +375,14 @@ function App() {
             onClose={() => setSettingsOpen(false)}
             onSettingChange={handleSettingChange}
             onContentTypeColorChange={handleContentTypeColorChange}
-            onThemeChange={(slug) => { setTheme(slug); }}
+            onThemeChange={(slug) => {
+              setTheme(slug);
+              setLocalSettings((prev) =>
+                prev.some((s) => s.key === "active_theme")
+                  ? prev.map((s) => s.key === "active_theme" ? { ...s, value: slug } : s)
+                  : [...prev, { key: "active_theme", value: slug, updated_at: "" }]
+              );
+            }}
             onCreateCollection={async (name, color) => { await createCollection(name, color); }}
             onUpdateCollection={async (id, name, color) => { await updateCollection(id, name, color); }}
             onDeleteCollection={async (id) => { await removeCollection(id); if (activeTab === id) handleTabChange("all"); refreshCollectionCounts(); }}

@@ -15,7 +15,7 @@ use tauri::{
 };
 use window_state::WindowSaveState;
 
-struct TrayMenuState(MenuItem<tauri::Wry>);
+pub struct TrayMenuState(pub MenuItem<tauri::Wry>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -161,6 +161,7 @@ pub fn run() {
             commands::log_security_event,
             commands::get_languages,
             commands::bootstrap,
+            commands::hide_window,
         ])
         .on_window_event(|window, event| {
             let app = window.app_handle();

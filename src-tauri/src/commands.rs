@@ -1,5 +1,5 @@
 use regex::Regex;
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::audit::AuditLog;
 use crate::categorizer::RulesCache;
@@ -674,4 +674,19 @@ pub fn log_security_event(
 #[tauri::command]
 pub async fn bootstrap(state: State<'_, DbState>) -> Result<BootstrapData, String> {
     crate::db::bootstrap_data(&state.0).await.map_err(db_err)
+}
+
+// ── Window control ─────────────────────────────────────────────────────────────
+
+/// Hide the window and update the tray menu label to "Open".
+/// Used by the custom window controls in the frontend to keep the tray in sync.
+#[tauri::command]
+pub fn hide_window(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_skip_taskbar(true);
+        let _ = window.hide();
+        if let Some(state) = app.try_state::<crate::TrayMenuState>() {
+            let _ = state.0.set_text("Open");
+        }
+    }
 }
