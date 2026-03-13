@@ -137,5 +137,11 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
     );
   }, []);
 
-  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias };
+  const patchEntryContentType = useCallback((id: number, contentType: string) => {
+    setEntries((prev) =>
+      prev.map((e) => e.id === id ? { ...e, content_type: contentType } : e)
+    );
+  }, []);
+
+  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType };
 }

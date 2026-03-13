@@ -205,6 +205,18 @@ pub async fn update_entry_alias(
 }
 
 #[tauri::command]
+pub async fn update_entry_content_type(
+    state: State<'_, DbState>,
+    id: i64,
+    content_type: String,
+) -> Result<(), String> {
+    validate_name(&content_type)?;
+    crate::db::update_entry_content_type(&state.0, id, &content_type)
+        .await
+        .map_err(db_err)
+}
+
+#[tauri::command]
 pub async fn delete_entry(
     app: tauri::AppHandle,
     state: State<'_, DbState>,

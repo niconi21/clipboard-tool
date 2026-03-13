@@ -829,6 +829,19 @@ pub async fn update_entry_alias(
     Ok(())
 }
 
+pub async fn update_entry_content_type(
+    pool: &SqlitePool,
+    id: i64,
+    content_type: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE entries SET content_type = ?1 WHERE id = ?2")
+        .bind(content_type)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 // ── Collection rules ─────────────────────────────────────────────────────────
 
 pub async fn get_all_collection_rules(pool: &SqlitePool) -> Result<Vec<CollectionRule>, sqlx::Error> {

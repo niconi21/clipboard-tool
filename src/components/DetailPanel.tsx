@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import type { ClipboardEntry, Collection, Subcollection } from "../types";
+import type { ClipboardEntry, Collection, ContentTypeStyle, Subcollection } from "../types";
 import { ContentRenderer } from "./ContentRenderer";
 import { CollectionSelector } from "./CollectionSelector";
 import { timeAgo } from "../utils/time";
@@ -10,11 +10,12 @@ interface Props {
   entry: ClipboardEntry;
   collections: Collection[];
   subcollections: Subcollection[];
+  contentTypes: ContentTypeStyle[];
   colorFor: (name: string) => string;
-  labelFor: (name: string) => string;
   onClose: () => void;
   onCollectionChanged?: (entryId: number, collectionIds: number[]) => void;
   onAliasChanged?: (entryId: number, alias: string | null) => void;
+  onContentTypeChanged?: (entryId: number, contentType: string) => void;
 }
 
 async function copyEntry(entry: ClipboardEntry) {
@@ -29,7 +30,7 @@ async function copyEntry(entry: ClipboardEntry) {
   }
 }
 
-export function DetailPanel({ entry, collections, subcollections, colorFor, labelFor, onClose, onCollectionChanged, onAliasChanged }: Props) {
+export function DetailPanel({ entry, collections, subcollections, contentTypes, colorFor, onClose, onCollectionChanged, onAliasChanged, onContentTypeChanged }: Props) {
   const { t } = useTranslation();
   const color = colorFor(entry.content_type);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -104,12 +105,28 @@ export function DetailPanel({ entry, collections, subcollections, colorFor, labe
     <div className="flex flex-col w-full h-full border-l border-stroke bg-base overflow-hidden">
       {/* Panel header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-stroke shrink-0 gap-2">
-        <span
-          className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide shrink-0"
+        <select
+          value={entry.content_type}
+          onChange={async (e) => {
+            const newType = e.target.value;
+            if (newType === entry.content_type) return;
+            try {
+              await invoke("update_entry_content_type", { id: entry.id, contentType: newType });
+              onContentTypeChanged?.(entry.id, newType);
+            } catch (err) {
+              console.error("[DetailPanel] content type update failed:", err);
+            }
+          }}
+          title={t("detail.change_type")}
+          className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide shrink-0 cursor-pointer appearance-none border-none outline-none"
           style={{ backgroundColor: color + "26", color }}
         >
-          {labelFor(entry.content_type)}
-        </span>
+          {contentTypes.map((ct) => (
+            <option key={ct.name} value={ct.name}>
+              {ct.label}
+            </option>
+          ))}
+        </select>
 
         {/* Alias field */}
         {editingAlias ? (

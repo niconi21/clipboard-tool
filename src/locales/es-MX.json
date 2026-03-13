@@ -58,7 +58,8 @@
     "alias_add": "Agregar alias…",
     "alias_edit": "Editar alias",
     "alias_placeholder": "Alias…",
-    "alias_clear": "Quitar alias"
+    "alias_clear": "Quitar alias",
+    "change_type": "Cambiar tipo de contenido"
   },
   "collection_selector": {
     "add": "Agregar a colección",
