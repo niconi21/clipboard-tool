@@ -173,7 +173,6 @@
   },
   "app": {
     "footer_hint": "Clic para vista previa · Hover para acciones",
-    "version": "clipboard-tool v1.0",
     "delete_error_fallback": "No se pudo eliminar la entrada.",
     "delete_error_in_collection": "La entrada pertenece a la(s) colección(es): {{names}}. Quítala de todas las colecciones antes de eliminarla."
   },

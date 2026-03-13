@@ -173,7 +173,6 @@
   },
   "app": {
     "footer_hint": "Click to preview · Hover for actions",
-    "version": "clipboard-tool v1.0",
     "delete_error_fallback": "Could not delete entry.",
     "delete_error_in_collection": "Entry belongs to collection(s): {{names}}. Remove it from all collections before deleting."
   },

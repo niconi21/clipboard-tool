@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
@@ -23,6 +24,9 @@ const PANEL_MIN = 180;
 const PANEL_DEFAULT = 320;
 
 function App() {
+  const [appVersion, setAppVersion] = useState("");
+  useEffect(() => { getVersion().then(setAppVersion); }, []);
+
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ClipboardFilters>(EMPTY_FILTERS);
   const [selectedEntry, setSelectedEntry] = useState<ClipboardEntry | null>(null);
@@ -472,7 +476,7 @@ function App() {
       {/* Footer */}
       <div className="flex items-center justify-between px-4 py-2 border-t border-stroke shrink-0">
         <span className="text-[11px] text-content-3">{t("app.footer_hint")}</span>
-        <span className="text-[11px] text-content-3">{t("app.version")}</span>
+        <span className="text-[11px] text-content-3">clipboard-tool {appVersion ? `v${appVersion}` : "…"}</span>
       </div>
       </>
       )}
