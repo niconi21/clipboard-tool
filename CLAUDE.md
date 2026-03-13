@@ -238,6 +238,17 @@ mvps/
     └── measure-cpu.sh    # validates adaptive polling (visible vs hidden CPU usage)
 ```
 
+## Changelog
+
+`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) with sections: `Added`, `Fixed`, `Changed`, `Performance`, `Removed`.
+
+**Update it before tagging a release:**
+1. Move all entries from `[Unreleased]` to the new version section (e.g. `## [1.1.0] - YYYY-MM-DD`)
+2. Add a new empty `## [Unreleased]` section at the top
+3. Commit as `chore: update CHANGELOG for vX.X.X`
+
+During development, append entries to `[Unreleased]` as issues are closed — one line per issue, referencing the issue number (`feat(#6): ...`, `fix(#5): ...`).
+
 ## Build & Release
 
 ```bash
