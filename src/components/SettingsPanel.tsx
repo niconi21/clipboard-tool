@@ -108,6 +108,7 @@ export function SettingsPanel({
   }
 
   const maxBytes = getSetting("content_analysis_max_bytes", "8192");
+  const maxImageBytes = getSetting("max_image_size_bytes", "10485760");
   const pageSize = getSetting("page_size", "50");
   const maxEntries = getSetting("max_history_entries", "0");
   const retentionDays = getSetting("retention_days", "0");
@@ -349,6 +350,20 @@ export function SettingsPanel({
                   value={maxBytes}
                   onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 0) debouncedSettingChange("content_analysis_max_bytes", v); }}
                   className="w-24 bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
+                />
+              </SettingRow>
+
+              <div className="border-t border-stroke" />
+
+              <SettingRow
+                label={t("settings.behavior.max_image_label")}
+                description={<Trans i18nKey="settings.behavior.max_image_desc" components={{ code: <Code /> }} />}
+              >
+                <input
+                  type="number" min="0" step="1048576"
+                  value={maxImageBytes}
+                  onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 0) debouncedSettingChange("max_image_size_bytes", v); }}
+                  className="w-28 bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
                 />
               </SettingRow>
             </div>

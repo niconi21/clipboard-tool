@@ -46,6 +46,7 @@ export function ContentRenderer({ content, contentType }: Props) {
     case "sql":      return <CodeRenderer content={content} language="sql" />;
     case "shell":    return <CodeRenderer content={content} language="bash" />;
     case "markdown": return <MarkdownRenderer content={content} />;
+    case "image":    return <ImageRenderer content={content} />;
     default:         return <PlainRenderer content={content} />;
   }
 }
@@ -232,6 +233,36 @@ function MarkdownRenderer({ content }: { content: string }) {
         <CodeRenderer content={content} language="markdown" />
       )}
     </div>
+  );
+}
+
+// ── Image ─────────────────────────────────────────────────────────────────────
+
+function ImageRenderer({ content }: { content: string }) {
+  const { t } = useTranslation();
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    invoke<string>("get_image_base64", { path: content })
+      .then(setSrc)
+      .catch(() => setError(true));
+  }, [content]);
+
+  if (error) {
+    return <p className="text-xs text-content-3">{t("content_renderer.image_error")}</p>;
+  }
+  if (!src) {
+    return <div className="w-full h-48 rounded bg-surface-raised animate-pulse" />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className="max-w-full max-h-[80vh] rounded border border-stroke object-contain select-none"
+      draggable={false}
+    />
   );
 }
 

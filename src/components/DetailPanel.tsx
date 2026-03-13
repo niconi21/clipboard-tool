@@ -17,9 +17,13 @@ interface Props {
   onAliasChanged?: (entryId: number, alias: string | null) => void;
 }
 
-async function copyEntry(content: string) {
+async function copyEntry(entry: ClipboardEntry) {
   try {
-    await invoke("copy_to_clipboard", { content });
+    if (entry.content_type === "image") {
+      await invoke("copy_image_to_clipboard", { path: entry.content });
+    } else {
+      await invoke("copy_to_clipboard", { content: entry.content });
+    }
   } catch (e) {
     console.error("[DetailPanel] copy failed:", e);
   }
@@ -63,6 +67,7 @@ export function DetailPanel({ entry, collections, subcollections, colorFor, labe
   }
 
   function handleMouseUp(e: React.MouseEvent) {
+    if (entry.content_type === "image") return;
     const selection = window.getSelection();
     const text = selection?.toString().trim() ?? "";
     if (!text || !selection || selection.rangeCount === 0) {
@@ -152,7 +157,7 @@ export function DetailPanel({ entry, collections, subcollections, colorFor, labe
 
         <div className="flex items-center gap-1 shrink-0">
           <button
-            onClick={() => copyEntry(entry.content)}
+            onClick={() => copyEntry(entry)}
             className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-content-2 hover:text-content hover:bg-surface-raised transition-colors"
             title={t("detail.copy_title")}
           >

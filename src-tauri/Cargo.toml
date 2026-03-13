@@ -30,6 +30,9 @@ sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 tokio = { version = "1", features = ["time"] }
 arboard = "3"
 regex = "1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+sha2 = "0.10"
+base64 = "0.22"
 
 [profile.release]
 strip = true

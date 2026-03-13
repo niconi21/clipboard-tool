@@ -1,7 +1,11 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { ClipboardEntry, Collection } from "../types";
 import { timeAgo } from "../utils/time";
+
+// Module-level cache for image thumbnails to avoid refetching on scroll
+const imageCache = new Map<string, string>();
 
 interface Props {
   entry: ClipboardEntry;
@@ -10,9 +14,33 @@ interface Props {
   onSelect: (entry: ClipboardEntry) => void;
   onDelete: (id: number) => void;
   onToggleFavorite: (id: number) => void;
-  onCopy: (content: string) => void;
+  onCopy: (entry: ClipboardEntry) => void;
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
+}
+
+function ImageThumbnail({ path }: { path: string }) {
+  const [src, setSrc] = useState<string | null>(() => imageCache.get(path) ?? null);
+
+  useEffect(() => {
+    if (src) return; // already cached
+    invoke<string>("get_image_base64", { path }).then((data) => {
+      imageCache.set(path, data);
+      setSrc(data);
+    }).catch(() => {});
+  }, [path, src]);
+
+  if (!src) {
+    return <div className="w-12 h-10 rounded bg-surface-raised animate-pulse" />;
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      className="h-10 max-w-30 rounded object-cover border border-stroke"
+      draggable={false}
+    />
+  );
 }
 
 export const EntryItem = memo(function EntryItem({
@@ -53,14 +81,20 @@ export const EntryItem = memo(function EntryItem({
 
       {/* Content preview */}
       <div className="flex-1 min-w-0">
-        {entry.alias && (
-          <p className="text-sm text-content font-medium leading-snug truncate">
-            {entry.alias}
-          </p>
+        {entry.content_type === "image" ? (
+          <ImageThumbnail path={entry.content} />
+        ) : (
+          <>
+            {entry.alias && (
+              <p className="text-sm text-content font-medium leading-snug truncate">
+                {entry.alias}
+              </p>
+            )}
+            <p className={`text-sm leading-snug font-mono line-clamp-2 ${entry.alias ? "text-content-3" : "text-content"}`}>
+              {entry.content.replaceAll("\n", " ↵ ")}
+            </p>
+          </>
         )}
-        <p className={`text-sm leading-snug font-mono line-clamp-2 ${entry.alias ? "text-content-3" : "text-content"}`}>
-          {entry.content.replaceAll("\n", " ↵ ")}
-        </p>
         <div className="flex items-center gap-2 mt-0.5">
           {entry.source_app && (
             <span className="text-[10px] text-content-2">{entry.source_app}</span>
@@ -89,7 +123,7 @@ export const EntryItem = memo(function EntryItem({
         }`}
       >
         <button
-          onClick={(e) => { e.stopPropagation(); onCopy(entry.content); }}
+          onClick={(e) => { e.stopPropagation(); onCopy(entry); }}
           className="p-1 rounded hover:bg-surface-raised text-content-2 hover:text-accent-text transition-colors"
           title={t("entry.copy")}
         >

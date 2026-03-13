@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(#26): Markdown preview renderer in DetailPanel — rendered HTML view with Preview/Source toggle, sanitized output, links open in system browser
 - feat(#3): auto-assign entries to collections via rules — DB-driven collection_rules with regex matching on content type, source app, window title, and content pattern; AND logic within a rule, OR across rules; full CRUD in Settings > Collections with inline toggle/delete; rules compiled in RulesCache and evaluated on every new clipboard entry
 - feat(#1): subcollections — hierarchical organization within collections. Each collection gets a default "Sin clasificar" subcollection. Users can create, rename, and delete subcollections. Left side panel shows subcollections when viewing a collection tab. Entries can be moved between subcollections via the collection selector in DetailPanel. Deleting a subcollection moves entries to the default. Schema: `subcollections` table + `subcollection_id` in `entry_collections`
+- feat(#4): image clipboard support — capture images from the system clipboard, store as PNG files on disk with SHA256 dedup. Thumbnail preview in entry list, full-size display in detail panel. Copy image back to clipboard. Orphaned image files cleaned up on deletion. Configurable `max_image_size_bytes` setting
 
 ### Fixed
 - fix(#21): app version in footer and About tab now read dynamically via `getVersion()` — no longer hardcoded

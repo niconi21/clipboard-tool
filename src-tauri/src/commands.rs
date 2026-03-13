@@ -3,7 +3,7 @@ use tauri::{Manager, State};
 
 use crate::audit::AuditLog;
 use crate::categorizer::RulesCache;
-use crate::clipboard::AppCopiedContent;
+use crate::clipboard::{AppCopiedContent, AppCopiedImageHash};
 use crate::db::{
     BootstrapData, Category, ClipboardEntry, Collection, ContentRule, ContentTypeStyle,
     ContextRule, DbState, Language, Setting, Subcollection, Theme,
@@ -206,6 +206,7 @@ pub async fn update_entry_alias(
 
 #[tauri::command]
 pub async fn delete_entry(
+    app: tauri::AppHandle,
     state: State<'_, DbState>,
     audit: State<'_, AuditLog>,
     id: i64,
@@ -222,11 +223,18 @@ pub async fn delete_entry(
     .map_err(db_err)?;
 
     if !collection_names.is_empty() {
-        // Return a parseable error code so the frontend can translate it.
-        // Format: "ENTRY_IN_COLLECTION:<comma-separated names>"
         let names: Vec<&str> = collection_names.iter().map(|(n,)| n.as_str()).collect();
         return Err(format!("ENTRY_IN_COLLECTION:{}", names.join(",")));
     }
+
+    // Fetch entry info before deletion for image cleanup
+    let entry_info: Option<(String, String)> = sqlx::query_as(
+        "SELECT content, content_type FROM entries WHERE id = ?1",
+    )
+    .bind(id)
+    .fetch_optional(&state.0)
+    .await
+    .map_err(db_err)?;
 
     sqlx::query("DELETE FROM entries WHERE id = ?1")
         .bind(id)
@@ -235,7 +243,28 @@ pub async fn delete_entry(
         .map(|_| {
             audit.log("entry_deleted", serde_json::json!({ "id": id }));
         })
-        .map_err(db_err)
+        .map_err(db_err)?;
+
+    // Clean up orphaned image file
+    if let Some((content, content_type)) = entry_info {
+        if content_type == "image" {
+            let still_used: (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM entries WHERE content = ?1",
+            )
+            .bind(&content)
+            .fetch_one(&state.0)
+            .await
+            .map_err(db_err)?;
+
+            if still_used.0 == 0 {
+                if let Ok(data_dir) = app.path().app_data_dir() {
+                    let _ = std::fs::remove_file(data_dir.join(&content));
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -903,4 +932,59 @@ pub fn hide_window(app: tauri::AppHandle) {
             let _ = state.toggle.set_text(&label);
         }
     }
+}
+
+// ── Image commands ───────────────────────────────────────────────────────────
+
+/// Returns a data URI (data:image/png;base64,...) for an image stored on disk.
+#[tauri::command]
+pub async fn get_image_base64(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    if path.contains("..") || !path.starts_with("images/") {
+        return Err("Invalid image path".to_string());
+    }
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let full_path = data_dir.join(&path);
+    let bytes = std::fs::read(&full_path).map_err(|e| format!("Failed to read image: {e}"))?;
+    use base64::Engine;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(&bytes)
+    ))
+}
+
+/// Copy an image back to the system clipboard from its stored PNG file.
+#[tauri::command]
+pub async fn copy_image_to_clipboard(
+    app: tauri::AppHandle,
+    app_copied_hash: State<'_, AppCopiedImageHash>,
+    path: String,
+) -> Result<(), String> {
+    if path.contains("..") || !path.starts_with("images/") {
+        return Err("Invalid image path".to_string());
+    }
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let full_path = data_dir.join(&path);
+
+    let img = image::open(&full_path).map_err(|e| format!("Failed to open image: {e}"))?;
+    let rgba = img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+
+    // Set self-copy prevention hash
+    {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(rgba.as_raw());
+        let hash = format!("{:x}", hasher.finalize());
+        let mut lock = app_copied_hash.0.lock().unwrap();
+        *lock = Some(hash);
+    }
+
+    let img_data = arboard::ImageData {
+        width: w as usize,
+        height: h as usize,
+        bytes: std::borrow::Cow::Owned(rgba.into_raw()),
+    };
+    arboard::Clipboard::new()
+        .and_then(|mut cb| cb.set_image(img_data))
+        .map_err(|e| e.to_string())
 }

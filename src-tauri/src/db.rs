@@ -173,6 +173,9 @@ pub async fn init_pool(app: &AppHandle) -> Result<SqlitePool, sqlx::Error> {
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
 
+    std::fs::create_dir_all(data_dir.join("images"))
+        .map_err(|e| sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+
     let db_file = data_dir.join("clipboard.db");
 
     let options = SqliteConnectOptions::from_str(&format!("sqlite:{}", db_file.display()))
@@ -725,6 +728,7 @@ async fn seed_settings(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("active_theme", "midnight"),
         ("page_size", "50"),
         ("language", "en"),
+        ("max_image_size_bytes", "10485760"),
     ];
 
     for (key, value) in defaults {
@@ -754,6 +758,7 @@ async fn seed_content_types(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("sql",      "SQL",      "#f97316"),
         ("shell",    "Shell",    "#10b981"),
         ("markdown", "Markdown", "#64748b"),
+        ("image",    "Image",    "#ec4899"),
     ];
 
     for (name, label, color) in types {
@@ -1071,6 +1076,32 @@ pub async fn cleanup_entries(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         .await?;
     }
 
+    Ok(())
+}
+
+/// Delete image files in `<app_data>/images/` that are no longer referenced by any entry.
+pub async fn cleanup_orphaned_images(
+    app_data_dir: &std::path::Path,
+    pool: &SqlitePool,
+) -> Result<(), sqlx::Error> {
+    let referenced: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT content FROM entries WHERE content_type = 'image'",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let referenced_set: std::collections::HashSet<String> =
+        referenced.into_iter().map(|(c,)| c).collect();
+
+    let images_dir = app_data_dir.join("images");
+    if let Ok(dir) = std::fs::read_dir(&images_dir) {
+        for entry in dir.flatten() {
+            let rel_path = format!("images/{}", entry.file_name().to_string_lossy());
+            if !referenced_set.contains(&rel_path) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
     Ok(())
 }
 

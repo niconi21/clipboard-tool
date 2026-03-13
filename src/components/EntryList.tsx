@@ -15,7 +15,7 @@ interface Props {
   onSelect: (entry: ClipboardEntry) => void;
   onDelete: (id: number) => void;
   onToggleFavorite: (id: number) => void;
-  onCopy: (content: string) => void;
+  onCopy: (entry: ClipboardEntry) => void;
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
 }

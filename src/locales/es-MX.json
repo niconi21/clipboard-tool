@@ -70,7 +70,9 @@
     "non_http": "URL no-http — no se puede abrir",
     "open_email": "Abrir cliente de correo",
     "md_preview": "Vista previa",
-    "md_source": "Fuente"
+    "md_source": "Fuente",
+    "image_loading": "Cargando imagen…",
+    "image_error": "No se pudo cargar la imagen"
   },
   "typeahead": {
     "search": "Buscar...",
@@ -125,7 +127,9 @@
       "dedup_label": "Intervalo de deduplicación (min)",
       "dedup_desc": "Con qué frecuencia se eliminan entradas duplicadas, conservando la copia más reciente. <code>0</code> = desactivado.",
       "max_bytes_label": "Máx. bytes a analizar",
-      "max_bytes_desc": "El contenido más largo que esto se trunca antes de aplicar patrones. <code>0</code> = sin límite."
+      "max_bytes_desc": "El contenido más largo que esto se trunca antes de aplicar patrones. <code>0</code> = sin límite.",
+      "max_image_label": "Máx. tamaño de imagen (bytes)",
+      "max_image_desc": "Tamaño máximo de imágenes del portapapeles a capturar. <code>0</code> = sin límite."
     }
   },
   "collections_mgr": {

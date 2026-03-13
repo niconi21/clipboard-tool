@@ -505,9 +505,12 @@ name = "clipboard-tool"
 version = "1.1.0"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
+ "image",
  "regex",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "tauri",
  "tauri-build",

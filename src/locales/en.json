@@ -70,7 +70,9 @@
     "non_http": "Non-http URL — cannot be opened",
     "open_email": "Open email client",
     "md_preview": "Preview",
-    "md_source": "Source"
+    "md_source": "Source",
+    "image_loading": "Loading image…",
+    "image_error": "Image could not be loaded"
   },
   "typeahead": {
     "search": "Search...",
@@ -125,7 +127,9 @@
       "dedup_label": "Dedup interval (minutes)",
       "dedup_desc": "How often to remove duplicate entries, keeping only the latest copy. <code>0</code> = disabled.",
       "max_bytes_label": "Max bytes to analyze",
-      "max_bytes_desc": "Content longer than this is truncated before pattern matching. <code>0</code> = no limit."
+      "max_bytes_desc": "Content longer than this is truncated before pattern matching. <code>0</code> = no limit.",
+      "max_image_label": "Max image size (bytes)",
+      "max_image_desc": "Maximum raw size of clipboard images to capture. <code>0</code> = no limit."
     }
   },
   "collections_mgr": {

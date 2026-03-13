@@ -69,6 +69,7 @@ pub fn run() {
             app.manage(audit_log);
             app.manage(app_log);
             app.manage(clipboard::AppCopiedContent::new());
+            app.manage(clipboard::AppCopiedImageHash::new());
 
             // Window save state: tracks pending position/size changes, flushes to DB
             let win_save = WindowSaveState::new();
@@ -199,6 +200,8 @@ pub fn run() {
             commands::get_subcollection_counts,
             commands::move_entry_subcollection,
             commands::get_entry_subcollection_ids,
+            commands::get_image_base64,
+            commands::copy_image_to_clipboard,
         ])
         .on_window_event(|window, event| {
             let app = window.app_handle();

@@ -241,8 +241,12 @@ function App() {
     bumpSubCounts();
   }
 
-  const handleCopy = useCallback((content: string) => {
-    invoke("copy_to_clipboard", { content }).catch(console.error);
+  const handleCopy = useCallback((entry: ClipboardEntry) => {
+    if (entry.content_type === "image") {
+      invoke("copy_image_to_clipboard", { path: entry.content }).catch(console.error);
+    } else {
+      invoke("copy_to_clipboard", { content: entry.content }).catch(console.error);
+    }
   }, []);
 
   function handleSettingChange(key: string, value: string) {
