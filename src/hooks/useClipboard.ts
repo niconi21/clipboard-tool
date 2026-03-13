@@ -124,5 +124,11 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
     });
   }, [favoriteOnly]);
 
-  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite };
+  const patchEntryCollections = useCallback((id: number, collectionIds: number[]) => {
+    setEntries((prev) =>
+      prev.map((e) => e.id === id ? { ...e, collection_ids: collectionIds.join(",") } : e)
+    );
+  }, []);
+
+  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections };
 }

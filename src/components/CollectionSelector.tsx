@@ -6,7 +6,7 @@ import type { Collection } from "../types";
 interface Props {
   entryId: number;
   collections: Collection[];
-  onChanged?: () => void;
+  onChanged?: (collectionIds: number[]) => void;
 }
 
 export function CollectionSelector({ entryId, collections, onChanged }: Props) {
@@ -39,8 +39,9 @@ export function CollectionSelector({ entryId, collections, onChanged }: Props) {
     if (next.has(collectionId)) next.delete(collectionId);
     else next.add(collectionId);
     setSelectedIds(next);
-    await invoke("set_entry_collections", { entryId, collectionIds: [...next] });
-    onChanged?.();
+    const ids = [...next];
+    await invoke("set_entry_collections", { entryId, collectionIds: ids });
+    onChanged?.(ids);
   }
 
   if (collections.length === 0) return null;

@@ -12,7 +12,7 @@ interface Props {
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
   onClose: () => void;
-  onCollectionChanged?: () => void;
+  onCollectionChanged?: (entryId: number, collectionIds: number[]) => void;
 }
 
 async function copyEntry(content: string) {
@@ -156,7 +156,7 @@ export function DetailPanel({ entry, collections, colorFor, labelFor, onClose, o
             <CollectionSelector
               entryId={entry.id}
               collections={collections}
-              onChanged={onCollectionChanged}
+              onChanged={(ids) => onCollectionChanged?.(entry.id, ids)}
             />
           </div>
         )}
