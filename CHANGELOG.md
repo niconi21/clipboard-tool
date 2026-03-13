@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-03-13
+
 ### Added
 - feat(#2): optional alias for clipboard entries — inline editable field in DetailPanel header; alias shown in bold above content preview in list; searchable alongside content and window title
 - feat(#9): collection chips shown directly on entry list rows — colored badges for each non-builtin collection the entry belongs to
