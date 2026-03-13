@@ -31,7 +31,7 @@ export const EntryItem = memo(function EntryItem({
 
   const collectionChips = entry.collection_ids
     ? entry.collection_ids.split(",").map(Number).flatMap((id) => {
-        const col = collections.find((c) => c.id === id && !c.is_builtin);
+        const col = collections.find((c) => c.id === id);
         return col ? [col] : [];
       })
     : [];
