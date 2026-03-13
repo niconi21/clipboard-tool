@@ -49,6 +49,20 @@ export interface ContentRule {
   created_at: string;
 }
 
+export interface CollectionRule {
+  id: number;
+  collection_id: number;
+  collection_name: string;
+  content_type: string | null;
+  source_app: string | null;
+  window_title: string | null;
+  content_pattern: string | null;
+  priority: number;
+  enabled: boolean;
+  is_builtin: boolean;
+  created_at: string;
+}
+
 export interface Collection {
   id: number;
   name: string;

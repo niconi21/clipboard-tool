@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useTranslation, Trans } from "react-i18next";
-import type { Category, Collection, ContentRule, ContentTypeStyle, ContextRule, Language, Setting, Theme } from "../types";
+import type { Category, Collection, CollectionRule, ContentRule, ContentTypeStyle, ContextRule, Language, Setting, Theme } from "../types";
 import { CollectionsManager } from "./CollectionsManager";
 import { ContentTypesManager } from "./ContentTypesManager";
 import { CategoriesManager } from "./CategoriesManager";
@@ -35,6 +35,10 @@ interface Props {
   onDeleteContextRule: (id: number) => Promise<void>;
   onToggleContextRule: (id: number, enabled: boolean) => Promise<void>;
   onToggleContentTypeRule: (id: number, enabled: boolean) => Promise<void>;
+  collectionRules: CollectionRule[];
+  onCreateCollectionRule: (collectionId: number, contentType: string | null, sourceApp: string | null, windowTitle: string | null, contentPattern: string | null, priority: number) => Promise<void>;
+  onDeleteCollectionRule: (id: number) => Promise<void>;
+  onToggleCollectionRule: (id: number, enabled: boolean) => Promise<void>;
 }
 
 type Tab = "appearance" | "content-types" | "categories" | "collections" | "behavior" | "about";
@@ -68,6 +72,10 @@ export function SettingsPanel({
   onDeleteContextRule,
   onToggleContextRule,
   onToggleContentTypeRule,
+  collectionRules,
+  onCreateCollectionRule,
+  onDeleteCollectionRule,
+  onToggleCollectionRule,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
@@ -247,10 +255,15 @@ export function SettingsPanel({
           >
             <CollectionsManager
               collections={collections}
+              contentTypes={contentTypes}
               counts={collectionCounts}
+              collectionRules={collectionRules}
               onCreate={onCreateCollection}
               onUpdate={onUpdateCollection}
               onDelete={onDeleteCollection}
+              onCreateRule={onCreateCollectionRule}
+              onDeleteRule={onDeleteCollectionRule}
+              onToggleRule={onToggleCollectionRule}
             />
           </Section>
         )}

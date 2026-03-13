@@ -3,13 +3,14 @@ use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use crate::db::{ContentRule, ContextRule};
+use crate::db::{CollectionRuleRaw, ContentRule, ContextRule};
 
 // ── Public result ─────────────────────────────────────────────────────────────
 
 pub struct Classification {
     pub content_type: String,
     pub category_id: Option<i64>,
+    pub collection_ids: Vec<i64>,
 }
 
 // ── Compiled rules ────────────────────────────────────────────────────────────
@@ -29,11 +30,20 @@ struct CompiledContentGroup {
     priority: i64,
 }
 
+struct CompiledCollectionRule {
+    collection_id: i64,
+    content_type: Option<String>,
+    source_app_re: Option<Regex>,
+    window_title_re: Option<Regex>,
+    content_pattern_re: Option<Regex>,
+}
+
 // ── Cache ─────────────────────────────────────────────────────────────────────
 
 struct Inner {
     context: Vec<CompiledContextRule>,
     content: Vec<CompiledContentGroup>,
+    collection: Vec<CompiledCollectionRule>,
     content_max_bytes: usize,
     category_map: HashMap<String, i64>, // category name → id
 }
@@ -51,6 +61,10 @@ impl RulesCache {
             eprintln!("[categorizer] failed to load content rules: {e}");
             vec![]
         });
+        let collection_rules = crate::db::get_enabled_collection_rules(pool).await.unwrap_or_else(|e| {
+            eprintln!("[categorizer] failed to load collection rules: {e}");
+            vec![]
+        });
         let content_max_bytes = load_max_bytes(pool).await;
         let category_map = crate::db::get_category_name_id_map(pool).await.unwrap_or_else(|e| {
             eprintln!("[categorizer] failed to load category map: {e}");
@@ -59,6 +73,7 @@ impl RulesCache {
         let inner = Inner {
             context: compile_context_rules(context_rules),
             content: compile_content_rules(content_rules),
+            collection: compile_collection_rules(collection_rules),
             content_max_bytes,
             category_map,
         };
@@ -68,11 +83,13 @@ impl RulesCache {
     pub async fn refresh(&self, pool: &SqlitePool) {
         let ctx = crate::db::get_context_rules(pool).await.unwrap_or_default();
         let cnt = crate::db::get_content_rules(pool).await.unwrap_or_default();
+        let col = crate::db::get_enabled_collection_rules(pool).await.unwrap_or_default();
         let max_bytes = load_max_bytes(pool).await;
         let category_map = crate::db::get_category_name_id_map(pool).await.unwrap_or_default();
         if let Ok(mut cache) = self.0.write() {
             cache.context = compile_context_rules(ctx);
             cache.content = compile_content_rules(cnt);
+            cache.collection = compile_collection_rules(col);
             cache.content_max_bytes = max_bytes;
             cache.category_map = category_map;
         }
@@ -98,16 +115,21 @@ impl RulesCache {
                 if from_context.is_some() {
                     from_context
                 } else {
-                    // Fallback: infer category from content type
                     default_category_for_type(&content_type)
                         .and_then(|name| inner.category_map.get(name).copied())
                 }
             })
             .unwrap_or(None);
 
+        let collection_ids = guard
+            .as_ref()
+            .map(|inner| match_collections(&inner.collection, content, &content_type, source_app, window_title))
+            .unwrap_or_default();
+
         Classification {
             content_type,
             category_id,
+            collection_ids,
         }
     }
 }
@@ -272,4 +294,81 @@ fn match_category(
     }
 
     best.and_then(|(_, cid)| cid)
+}
+
+// ── Collection rules ─────────────────────────────────────────────────────────
+
+fn compile_collection_rules(rules: Vec<CollectionRuleRaw>) -> Vec<CompiledCollectionRule> {
+    rules
+        .into_iter()
+        .filter_map(|rule| {
+            let source_app_re = rule.source_app.as_deref().and_then(|p| Regex::new(p).ok());
+            let window_title_re = rule.window_title.as_deref().and_then(|p| Regex::new(p).ok());
+            let content_pattern_re = rule.content_pattern.as_deref().and_then(|p| Regex::new(p).ok());
+
+            // At least one criterion must be set
+            if rule.content_type.is_none()
+                && source_app_re.is_none()
+                && window_title_re.is_none()
+                && content_pattern_re.is_none()
+            {
+                return None;
+            }
+
+            Some(CompiledCollectionRule {
+                collection_id: rule.collection_id,
+                content_type: rule.content_type,
+                source_app_re,
+                window_title_re,
+                content_pattern_re,
+            })
+        })
+        .collect()
+}
+
+/// Returns all collection IDs that match the given entry. Multiple rules for the
+/// same collection = OR logic; multiple criteria within one rule = AND logic.
+fn match_collections(
+    rules: &[CompiledCollectionRule],
+    content: &str,
+    content_type: &str,
+    source_app: Option<&str>,
+    window_title: Option<&str>,
+) -> Vec<i64> {
+    let app = source_app.unwrap_or("");
+    let title = window_title.unwrap_or("");
+
+    let mut matched: Vec<i64> = Vec::new();
+
+    for rule in rules {
+        let type_ok = rule
+            .content_type
+            .as_deref()
+            .map(|ct| ct == content_type)
+            .unwrap_or(true);
+
+        let app_ok = rule
+            .source_app_re
+            .as_ref()
+            .map(|re| re.is_match(app))
+            .unwrap_or(true);
+
+        let title_ok = rule
+            .window_title_re
+            .as_ref()
+            .map(|re| re.is_match(title))
+            .unwrap_or(true);
+
+        let content_ok = rule
+            .content_pattern_re
+            .as_ref()
+            .map(|re| re.is_match(content))
+            .unwrap_or(true);
+
+        if type_ok && app_ok && title_ok && content_ok && !matched.contains(&rule.collection_id) {
+            matched.push(rule.collection_id);
+        }
+    }
+
+    matched
 }

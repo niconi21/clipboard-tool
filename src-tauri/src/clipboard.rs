@@ -113,7 +113,20 @@ pub fn start_watcher(app: AppHandle) {
                 )
                 .await
                 {
-                    Ok(entry) => {
+                    Ok(mut entry) => {
+                        // Auto-assign to collections based on collection_rules
+                        if !result.collection_ids.is_empty() {
+                            let mut assigned: Vec<String> = Vec::new();
+                            for cid in &result.collection_ids {
+                                if let Ok(()) = crate::db::add_entry_to_collection(pool, entry.id, *cid).await {
+                                    assigned.push(cid.to_string());
+                                }
+                            }
+                            if !assigned.is_empty() {
+                                entry.collection_ids = assigned.join(",");
+                            }
+                        }
+
                         let _ = app_clone.emit("clipboard-new-entry", &entry);
                         if let Err(e) = crate::db::cleanup_entries(pool).await {
                             if let Some(log) = app_clone.try_state::<AppLog>() {

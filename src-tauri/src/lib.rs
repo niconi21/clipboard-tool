@@ -188,6 +188,10 @@ pub fn run() {
             commands::bootstrap,
             commands::hide_window,
             commands::update_entry_alias,
+            commands::get_all_collection_rules,
+            commands::create_collection_rule,
+            commands::delete_collection_rule,
+            commands::toggle_collection_rule,
         ])
         .on_window_event(|window, event| {
             let app = window.app_handle();

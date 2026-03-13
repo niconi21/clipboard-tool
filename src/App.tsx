@@ -18,7 +18,7 @@ import { useContentTypes } from "./hooks/useContentTypes";
 import { useTheme } from "./hooks/useTheme";
 import { useCollections } from "./hooks/useCollections";
 import { currentOS } from "./hooks/useOS";
-import type { BootstrapData, Category, ClipboardEntry, ContentRule, ContextRule, Setting } from "./types";
+import type { BootstrapData, Category, ClipboardEntry, CollectionRule, ContentRule, ContextRule, Setting } from "./types";
 
 const PANEL_MIN = 180;
 const PANEL_DEFAULT = 320;
@@ -169,16 +169,17 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    listen("clipboard-new-entry", () => { if (!cancelled) loadCounts(); })
+    listen("clipboard-new-entry", () => { if (!cancelled) { loadCounts(); refreshCollectionCounts(); } })
       .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
       .catch(console.error);
     return () => { cancelled = true; unlisten?.(); };
-  }, [loadCounts]);
+  }, [loadCounts, refreshCollectionCounts]);
 
   // ── Settings panel — lazy load, cached after first open ──────────────────────
   const [categories, setCategories] = useState<Category[]>([]);
   const [contextRules, setContextRules] = useState<ContextRule[]>([]);
   const [contentTypeRules, setContentTypeRules] = useState<ContentRule[]>([]);
+  const [collectionRules, setCollectionRules] = useState<CollectionRule[]>([]);
 
   useEffect(() => {
     if (!settingsOpen || settingsLoadedRef.current) return;
@@ -186,6 +187,7 @@ function App() {
     invoke<Category[]>("get_all_categories").then(setCategories).catch(console.error);
     invoke<ContextRule[]>("get_all_context_rules").then(setContextRules).catch(console.error);
     invoke<ContentRule[]>("get_all_content_type_rules").then(setContentTypeRules).catch(console.error);
+    invoke<CollectionRule[]>("get_all_collection_rules").then(setCollectionRules).catch(console.error);
     // Merge bootstrap settings with any live updates
     setLocalSettings(allSettings);
   }, [settingsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -301,6 +303,21 @@ function App() {
     setContextRules(await invoke("get_all_context_rules"));
   }
 
+  async function handleCreateCollectionRule(collectionId: number, contentType: string | null, sourceApp: string | null, windowTitle: string | null, contentPattern: string | null, priority: number) {
+    await invoke("create_collection_rule", { collectionId, contentType, sourceApp, windowTitle, contentPattern, priority });
+    setCollectionRules(await invoke("get_all_collection_rules"));
+  }
+
+  async function handleDeleteCollectionRule(id: number) {
+    await invoke("delete_collection_rule", { id });
+    setCollectionRules(await invoke("get_all_collection_rules"));
+  }
+
+  async function handleToggleCollectionRule(id: number, enabled: boolean) {
+    await invoke("toggle_collection_rule", { id, enabled });
+    setCollectionRules((prev) => prev.map((r) => r.id === id ? { ...r, enabled } : r));
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div
@@ -397,6 +414,10 @@ function App() {
             onDeleteContextRule={handleDeleteContextRule}
             onToggleContextRule={handleToggleContextRule}
             onToggleContentTypeRule={handleToggleContentTypeRule}
+            collectionRules={collectionRules}
+            onCreateCollectionRule={handleCreateCollectionRule}
+            onDeleteCollectionRule={handleDeleteCollectionRule}
+            onToggleCollectionRule={handleToggleCollectionRule}
           />
         </div>
       ) : (

@@ -86,6 +86,32 @@ pub struct ContentRule {
     pub created_at: String,
 }
 
+/// Collection auto-assignment rule: matches conditions to auto-add entries to a collection.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, FromRow)]
+pub struct CollectionRule {
+    pub id: i64,
+    pub collection_id: i64,
+    pub collection_name: String, // via LEFT JOIN collections
+    pub content_type: Option<String>,
+    pub source_app: Option<String>,
+    pub window_title: Option<String>,
+    pub content_pattern: Option<String>,
+    pub priority: i64,
+    pub enabled: bool,
+    pub is_builtin: bool,
+    pub created_at: String,
+}
+
+/// Lightweight version for the categorizer (no display fields).
+#[derive(Debug, Clone)]
+pub struct CollectionRuleRaw {
+    pub collection_id: i64,
+    pub content_type: Option<String>,
+    pub source_app: Option<String>,
+    pub window_title: Option<String>,
+    pub content_pattern: Option<String>,
+}
+
 pub struct DbState(pub SqlitePool);
 
 #[derive(Debug, serde::Serialize)]
@@ -296,6 +322,23 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             enabled      INTEGER NOT NULL DEFAULT 1,
             is_builtin   INTEGER NOT NULL DEFAULT 1,
             created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS collection_rules (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            collection_id   INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+            content_type    TEXT    REFERENCES content_types(name),
+            source_app      TEXT,
+            window_title    TEXT,
+            content_pattern TEXT,
+            priority        INTEGER NOT NULL DEFAULT 0,
+            enabled         INTEGER NOT NULL DEFAULT 1,
+            is_builtin      INTEGER NOT NULL DEFAULT 0,
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
         )",
     )
     .execute(pool)
@@ -688,6 +731,89 @@ pub async fn update_entry_alias(
     sqlx::query("UPDATE entries SET alias = ?1 WHERE id = ?2")
         .bind(alias)
         .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+// ── Collection rules ─────────────────────────────────────────────────────────
+
+pub async fn get_all_collection_rules(pool: &SqlitePool) -> Result<Vec<CollectionRule>, sqlx::Error> {
+    sqlx::query_as::<_, CollectionRule>(
+        "SELECT cr.id, cr.collection_id,
+                COALESCE(c.name, 'unknown') AS collection_name,
+                cr.content_type, cr.source_app, cr.window_title, cr.content_pattern,
+                cr.priority, cr.enabled, cr.is_builtin, cr.created_at
+         FROM collection_rules cr
+         LEFT JOIN collections c ON c.id = cr.collection_id
+         ORDER BY cr.priority DESC, cr.id ASC",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_enabled_collection_rules(pool: &SqlitePool) -> Result<Vec<CollectionRuleRaw>, sqlx::Error> {
+    let rows: Vec<(i64, Option<String>, Option<String>, Option<String>, Option<String>)> =
+        sqlx::query_as(
+            "SELECT collection_id, content_type, source_app, window_title, content_pattern
+             FROM collection_rules
+             WHERE enabled = 1
+             ORDER BY priority DESC, id ASC",
+        )
+        .fetch_all(pool)
+        .await?;
+
+    Ok(rows.into_iter().map(|(collection_id, content_type, source_app, window_title, content_pattern)| {
+        CollectionRuleRaw { collection_id, content_type, source_app, window_title, content_pattern }
+    }).collect())
+}
+
+pub async fn create_collection_rule(
+    pool: &SqlitePool,
+    collection_id: i64,
+    content_type: Option<String>,
+    source_app: Option<String>,
+    window_title: Option<String>,
+    content_pattern: Option<String>,
+    priority: i64,
+) -> Result<i64, sqlx::Error> {
+    let (id,): (i64,) = sqlx::query_as(
+        "INSERT INTO collection_rules (collection_id, content_type, source_app, window_title, content_pattern, priority, is_builtin)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)
+         RETURNING id",
+    )
+    .bind(collection_id)
+    .bind(content_type)
+    .bind(source_app)
+    .bind(window_title)
+    .bind(content_pattern)
+    .bind(priority)
+    .fetch_one(pool)
+    .await?;
+    Ok(id)
+}
+
+pub async fn delete_collection_rule(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM collection_rules WHERE id = ?1 AND is_builtin = 0")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn toggle_collection_rule(pool: &SqlitePool, id: i64, enabled: bool) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE collection_rules SET enabled = ?1 WHERE id = ?2")
+        .bind(enabled)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn add_entry_to_collection(pool: &SqlitePool, entry_id: i64, collection_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT OR IGNORE INTO entry_collections (entry_id, collection_id) VALUES (?1, ?2)")
+        .bind(entry_id)
+        .bind(collection_id)
         .execute(pool)
         .await?;
     Ok(())

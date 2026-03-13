@@ -688,6 +688,84 @@ pub async fn set_content_type_rule_enabled(
     Ok(())
 }
 
+// ── Collection rules ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_all_collection_rules(
+    state: State<'_, DbState>,
+) -> Result<Vec<crate::db::CollectionRule>, String> {
+    crate::db::get_all_collection_rules(&state.0).await.map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn create_collection_rule(
+    db: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    audit: State<'_, AuditLog>,
+    collection_id: i64,
+    content_type: Option<String>,
+    source_app: Option<String>,
+    window_title: Option<String>,
+    content_pattern: Option<String>,
+    priority: i64,
+) -> Result<i64, String> {
+    // Validate regex patterns
+    if let Some(ref p) = source_app {
+        audited_validate(&audit, validate_regex_pattern(p), "create_collection_rule", "source_app")?;
+    }
+    if let Some(ref p) = window_title {
+        audited_validate(&audit, validate_regex_pattern(p), "create_collection_rule", "window_title")?;
+    }
+    if let Some(ref p) = content_pattern {
+        audited_validate(&audit, validate_regex_pattern(p), "create_collection_rule", "content_pattern")?;
+    }
+    let id = crate::db::create_collection_rule(
+        &db.0, collection_id, content_type, source_app, window_title, content_pattern, priority,
+    )
+    .await
+    .map_err(db_err)?;
+    cache.refresh(&db.0).await;
+    audit.log(
+        "collection_rule_created",
+        serde_json::json!({ "id": id, "collection_id": collection_id }),
+    );
+    Ok(id)
+}
+
+#[tauri::command]
+pub async fn delete_collection_rule(
+    db: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    audit: State<'_, AuditLog>,
+    id: i64,
+) -> Result<(), String> {
+    crate::db::delete_collection_rule(&db.0, id)
+        .await
+        .map_err(db_err)?;
+    cache.refresh(&db.0).await;
+    audit.log("collection_rule_deleted", serde_json::json!({ "id": id }));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn toggle_collection_rule(
+    db: State<'_, DbState>,
+    cache: State<'_, RulesCache>,
+    audit: State<'_, AuditLog>,
+    id: i64,
+    enabled: bool,
+) -> Result<(), String> {
+    crate::db::toggle_collection_rule(&db.0, id, enabled)
+        .await
+        .map_err(db_err)?;
+    cache.refresh(&db.0).await;
+    audit.log(
+        "collection_rule_toggled",
+        serde_json::json!({ "id": id, "enabled": enabled }),
+    );
+    Ok(())
+}
+
 // ── Frontend security events ───────────────────────────────────────────────────
 
 /// Called by the frontend to log security-relevant events that originate in the UI.
