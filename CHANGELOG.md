@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- fix(#21): app version in footer and About tab now read dynamically via `getVersion()` — no longer hardcoded
+
 ## [1.1.0] - TBD
 
 ### Added
