@@ -326,6 +326,7 @@ pub async fn get_settings(state: State<'_, DbState>) -> Result<Vec<Setting>, Str
 
 #[tauri::command]
 pub async fn update_setting(
+    app: tauri::AppHandle,
     db: State<'_, DbState>,
     cache: State<'_, RulesCache>,
     audit: State<'_, AuditLog>,
@@ -342,6 +343,21 @@ pub async fn update_setting(
     const CACHE_KEYS: &[&str] = &["content_analysis_max_bytes"];
     if CACHE_KEYS.contains(&key.as_str()) {
         cache.refresh(&db.0).await;
+    }
+
+    // Update tray menu labels immediately when the language changes
+    if key == "language" {
+        let (lbl_open, lbl_close, lbl_quit) = crate::tray_labels(&value);
+        if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
+            if let Ok(mut open) = tray.open_label.lock() { *open = lbl_open.to_string(); }
+            if let Ok(mut close) = tray.close_label.lock() { *close = lbl_close.to_string(); }
+            let _ = tray.quit.set_text(lbl_quit);
+            // Set toggle label based on current window visibility
+            let visible = app.get_webview_window("main")
+                .and_then(|w| w.is_visible().ok())
+                .unwrap_or(false);
+            let _ = tray.toggle.set_text(if visible { lbl_close } else { lbl_open });
+        }
     }
 
     Ok(())
@@ -678,7 +694,7 @@ pub async fn bootstrap(state: State<'_, DbState>) -> Result<BootstrapData, Strin
 
 // ── Window control ─────────────────────────────────────────────────────────────
 
-/// Hide the window and update the tray menu label to "Open".
+/// Hide the window and update the tray menu label to the localized "Open".
 /// Used by the custom window controls in the frontend to keep the tray in sync.
 #[tauri::command]
 pub fn hide_window(app: tauri::AppHandle) {
@@ -686,7 +702,10 @@ pub fn hide_window(app: tauri::AppHandle) {
         let _ = window.set_skip_taskbar(true);
         let _ = window.hide();
         if let Some(state) = app.try_state::<crate::TrayMenuState>() {
-            let _ = state.0.set_text("Open");
+            let label = state.open_label.lock()
+                .map(|l| l.clone())
+                .unwrap_or_else(|_| "Open".to_string());
+            let _ = state.toggle.set_text(&label);
         }
     }
 }

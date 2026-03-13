@@ -15,7 +15,20 @@ use tauri::{
 };
 use window_state::WindowSaveState;
 
-pub struct TrayMenuState(pub MenuItem<tauri::Wry>);
+pub struct TrayMenuState {
+    pub toggle: MenuItem<tauri::Wry>,
+    pub quit: MenuItem<tauri::Wry>,
+    pub open_label: std::sync::Mutex<String>,
+    pub close_label: std::sync::Mutex<String>,
+}
+
+/// Returns (open, close, quit) labels for the tray menu in the given language.
+pub fn tray_labels(lang: &str) -> (&'static str, &'static str, &'static str) {
+    match lang {
+        "es-MX" => ("Abrir", "Cerrar", "Salir"),
+        _ => ("Open", "Close", "Quit"),
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -45,6 +58,11 @@ pub fn run() {
 
             // Apply saved window position/size (or center on primary monitor if first run)
             tauri::async_runtime::block_on(window_state::apply_saved_state(&pool, app.handle()));
+
+            let lang = tauri::async_runtime::block_on(db::get_setting(&pool, "language"))
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "en".to_string());
 
             app.manage(DbState(pool));
             app.manage(rules_cache);
@@ -85,11 +103,18 @@ pub fn run() {
                 }
             });
 
-            let toggle_i = MenuItem::with_id(app, "toggle", "Open", true, None::<&str>)?;
-            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let (lbl_open, lbl_close, lbl_quit) = tray_labels(&lang);
+
+            let toggle_i = MenuItem::with_id(app, "toggle", lbl_open, true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", lbl_quit, true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&toggle_i, &quit_i])?;
 
-            app.manage(TrayMenuState(toggle_i));
+            app.manage(TrayMenuState {
+                toggle: toggle_i,
+                quit: quit_i,
+                open_label: std::sync::Mutex::new(lbl_open.to_string()),
+                close_label: std::sync::Mutex::new(lbl_close.to_string()),
+            });
 
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
@@ -198,7 +223,10 @@ pub fn run() {
                     let _ = window.set_skip_taskbar(true);
                     let _ = window.hide();
                     if let Some(state) = app.try_state::<TrayMenuState>() {
-                        let _ = state.0.set_text("Open");
+                        let label = state.open_label.lock()
+                            .map(|l| l.clone())
+                            .unwrap_or_else(|_| "Open".to_string());
+                        let _ = state.toggle.set_text(&label);
                     }
                 }
                 _ => {}
@@ -216,7 +244,10 @@ fn toggle_window(app: &tauri::AppHandle) {
             let _ = window.set_skip_taskbar(true);
             let _ = window.hide();
             if let Some(state) = app.try_state::<TrayMenuState>() {
-                let _ = state.0.set_text("Open");
+                let label = state.open_label.lock()
+                    .map(|l| l.clone())
+                    .unwrap_or_else(|_| "Open".to_string());
+                let _ = state.toggle.set_text(&label);
             }
         } else {
             // No center() here — window appears at its last saved position.
@@ -228,7 +259,10 @@ fn toggle_window(app: &tauri::AppHandle) {
                 state.mark_ready();
             }
             if let Some(state) = app.try_state::<TrayMenuState>() {
-                let _ = state.0.set_text("Close");
+                let label = state.close_label.lock()
+                    .map(|l| l.clone())
+                    .unwrap_or_else(|_| "Close".to_string());
+                let _ = state.toggle.set_text(&label);
             }
             let w = window.clone();
             std::thread::spawn(move || {
