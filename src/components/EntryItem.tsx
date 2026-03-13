@@ -66,7 +66,7 @@ export const EntryItem = memo(function EntryItem({
 
   return (
     <div
-      className={`group flex items-start gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+      className={`group relative flex items-start gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
         isSelected ? "bg-surface-active" : "hover:bg-surface-raised"
       }`}
       onClick={() => onSelect(entry)}
@@ -116,9 +116,9 @@ export const EntryItem = memo(function EntryItem({
         )}
       </div>
 
-      {/* Actions — visible on hover or when selected */}
+      {/* Actions — overlay on hover or when selected */}
       <div
-        className={`flex items-center gap-0.5 shrink-0 transition-opacity ${
+        className={`absolute right-2 top-2 flex items-center gap-0.5 rounded-md bg-surface-raised/90 backdrop-blur-sm border border-stroke px-0.5 py-0.5 shadow-sm transition-opacity ${
           isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
       >
