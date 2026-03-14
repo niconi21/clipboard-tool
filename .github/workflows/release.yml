@@ -6,7 +6,48 @@ on:
       - "v*"
 
 jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libssl-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Frontend tests
+        run: npm test
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
   release:
+    needs: [test]
     environment: production
     permissions:
       contents: write
