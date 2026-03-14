@@ -117,3 +117,99 @@ impl AppLog {
         }));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Read;
+    use tempfile::NamedTempFile;
+
+    fn read_lines(path: &std::path::Path) -> Vec<serde_json::Value> {
+        let mut file = std::fs::File::open(path).expect("open file");
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).expect("read file");
+        contents
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| serde_json::from_str(l).expect("parse json line"))
+            .collect()
+    }
+
+    #[test]
+    fn audit_log_writes_json_line() {
+        let tmp = NamedTempFile::new().unwrap();
+        let log = AuditLog::open(tmp.path().to_path_buf());
+        log.log("test_event", serde_json::json!({ "key": "value" }));
+        // Drop the log to flush writes
+        drop(log);
+
+        let lines = read_lines(tmp.path());
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0]["event"], "test_event");
+        assert_eq!(lines[0]["key"], "value");
+        assert!(lines[0]["ts"].is_number());
+    }
+
+    #[test]
+    fn app_log_writes_error() {
+        let tmp = NamedTempFile::new().unwrap();
+        let log = AppLog::open(tmp.path().to_path_buf());
+        log.error("test_src", "something went wrong");
+        drop(log);
+
+        let lines = read_lines(tmp.path());
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0]["level"], "error");
+        assert_eq!(lines[0]["src"], "test_src");
+        assert_eq!(lines[0]["msg"], "something went wrong");
+    }
+
+    #[test]
+    fn app_log_warn() {
+        let tmp = NamedTempFile::new().unwrap();
+        let log = AppLog::open(tmp.path().to_path_buf());
+        log.warn("watcher", "slow poll");
+        drop(log);
+
+        let lines = read_lines(tmp.path());
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0]["level"], "warn");
+    }
+
+    #[test]
+    fn app_log_info() {
+        let tmp = NamedTempFile::new().unwrap();
+        let log = AppLog::open(tmp.path().to_path_buf());
+        log.info("startup", "app started");
+        drop(log);
+
+        let lines = read_lines(tmp.path());
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0]["level"], "info");
+    }
+
+    #[test]
+    fn audit_log_rotation() {
+        let tmp = NamedTempFile::new().unwrap();
+        let path = tmp.path().to_path_buf();
+
+        // Write more than 1 MB to the file so rotation triggers
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .unwrap();
+            let chunk = b"x".repeat(1_100_000);
+            f.write_all(&chunk).unwrap();
+        }
+
+        // Opening AuditLog should trigger rotation because file > MAX_LOG_BYTES
+        let _log = AuditLog::open(path.clone());
+
+        let mut backup = path.clone().into_os_string();
+        backup.push(".1");
+        let backup_path = std::path::PathBuf::from(backup);
+        assert!(backup_path.exists(), "backup file .1 should exist after rotation");
+    }
+}

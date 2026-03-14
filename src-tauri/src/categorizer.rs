@@ -328,6 +328,7 @@ fn compile_collection_rules(rules: Vec<CollectionRuleRaw>) -> Vec<CompiledCollec
 
 /// Returns all collection IDs that match the given entry. Multiple rules for the
 /// same collection = OR logic; multiple criteria within one rule = AND logic.
+#[allow(dead_code)]
 fn match_collections(
     rules: &[CompiledCollectionRule],
     content: &str,
@@ -371,4 +372,575 @@ fn match_collections(
     }
 
     matched
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{CollectionRuleRaw, ContentRule, ContextRule};
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    fn make_context_rule(
+        id: i64,
+        category_id: Option<i64>,
+        source_app_pattern: Option<&str>,
+        window_title_pattern: Option<&str>,
+        priority: i64,
+    ) -> ContextRule {
+        ContextRule {
+            id,
+            category_id,
+            category_name: "test".to_string(),
+            source_app_pattern: source_app_pattern.map(String::from),
+            window_title_pattern: window_title_pattern.map(String::from),
+            priority,
+            enabled: true,
+            is_builtin: false,
+            created_at: "2024-01-01".to_string(),
+        }
+    }
+
+    fn make_content_rule(
+        id: i64,
+        content_type: &str,
+        pattern: &str,
+        min_hits: i64,
+        priority: i64,
+    ) -> ContentRule {
+        ContentRule {
+            id,
+            content_type: content_type.to_string(),
+            pattern: pattern.to_string(),
+            min_hits,
+            priority,
+            enabled: true,
+            is_builtin: false,
+            created_at: "2024-01-01".to_string(),
+        }
+    }
+
+    /// Build the seeded content rules matching the DB seed in db.rs.
+    fn seeded_content_rules() -> Vec<ContentRule> {
+        let mut rules = Vec::new();
+        let mut id = 1i64;
+
+        // url (priority 50, min_hits 1)
+        rules.push(make_content_rule(id, "url", r"^(https?|ftp)://\S+", 1, 50));
+        id += 1;
+
+        // email (priority 40, min_hits 1)
+        rules.push(make_content_rule(id, "email", r"^[^\s@]+@[^\s@]+\.[^\s@]+$", 1, 40));
+        id += 1;
+
+        // phone (priority 30, min_hits 1)
+        rules.push(make_content_rule(id, "phone", r"^[\+]?[\d\s\-\.\(\)]{7,25}$", 1, 30));
+        id += 1;
+
+        // color hex3/hex6 (priority 25, min_hits 1)
+        rules.push(make_content_rule(id, "color", r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$", 1, 25));
+        id += 1;
+        // color rgb/rgba (priority 25, min_hits 1)
+        rules.push(make_content_rule(id, "color", r"^rgba?\(\s*\d+", 1, 25));
+        id += 1;
+
+        // json (priority 22, min_hits 3) — 5 patterns
+        for pat in &[
+            r#"^\s*[\{\[]"#,
+            r#"^\s*[\}\]]"#,
+            r#""[^"]+"\s*:"#,
+            r#":\s*(true|false|null|-?\d)"#,
+            r#",\s*"[^"]+"#,
+        ] {
+            rules.push(make_content_rule(id, "json", pat, 3, 22));
+            id += 1;
+        }
+
+        // sql (priority 22, min_hits 2) — 5 patterns
+        for pat in &[
+            r"(?i)\b(SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|CREATE\s+(TABLE|INDEX|VIEW)|DROP\s+(TABLE|INDEX|VIEW)|ALTER\s+TABLE)\b",
+            r"(?i)\b(WHERE|JOIN|GROUP\s+BY|ORDER\s+BY|HAVING|LIMIT|OFFSET|UNION|INTERSECT|EXCEPT)\b",
+            r"(?i)\b(BEGIN|COMMIT|ROLLBACK|TRANSACTION|SAVEPOINT)\b",
+            r"(?i)\b(PRIMARY\s+KEY|FOREIGN\s+KEY|NOT\s+NULL|UNIQUE|DEFAULT|REFERENCES|ON\s+DELETE|ON\s+UPDATE|CASCADE)\b",
+            r"--\s*\S|/\*|\b(COUNT|SUM|AVG|MAX|MIN|COALESCE)\s*\(",
+        ] {
+            rules.push(make_content_rule(id, "sql", pat, 2, 22));
+            id += 1;
+        }
+
+        // shell (priority 21, min_hits 2) — 7 patterns
+        for pat in &[
+            r"(?m)^#!/",
+            r"(?m)^\$\s+\S",
+            r"(?m)^\s*#.*$",
+            r"\|\s*\w",
+            r"(?m)^\s*(if|for|while|case|fi|done|esac)\b",
+            r"\b(grep|awk|sed|curl|wget|chmod|sudo|apt|yum|brew|pip|npm|cargo|make)\b",
+            r"(?m)^\s*[A-Z_][A-Z0-9_]+=",
+        ] {
+            rules.push(make_content_rule(id, "shell", pat, 2, 21));
+            id += 1;
+        }
+
+        // code (priority 20, min_hits 3) — 10 patterns
+        for pat in &[
+            r"(?m)(^|\s)(fn |def |class |function |func |sub )\s*\w",
+            r"(?m)^\s*(import |use |require |include |from \S+ import)\S",
+            r"(?m)^\s*(if|else|elif|for|while|switch|match)\s*[\(\{]",
+            r"(?m)^\s*(return|yield|throw|raise|break|continue)\b",
+            r"(?m)^\s*(let |const |var |int |str |bool |float |double |char |void |auto )\w",
+            r"(?m)^\s*//|/\*|\*/|(?m)^\s*#\s",
+            r"[;{}]\s*$",
+            r"\w+\s*\(.*\)\s*\{",
+            r"(?m)^\s*@\w+",
+            r"(?m)^\s*(public|private|protected|static|async|abstract|override)\s+\w",
+        ] {
+            rules.push(make_content_rule(id, "code", pat, 3, 20));
+            id += 1;
+        }
+
+        // markdown (priority 18, min_hits 2) — 10 patterns
+        for pat in &[
+            r"(?m)^#{1,6}\s+\S",
+            r"\[.+?\]\(.+?\)",
+            r"(?m)^>\s+",
+            r"(?m)^\s*[-*+]\s+\S",
+            r"(?m)^\s*\d+\.\s+\S",
+            r"(?m)^```",
+            r"(?m)^\s*---+\s*$",
+            r"\*\*[^*]+\*\*|__[^_]+__",
+            r"\*[^*]+\*|_[^_]+_",
+            r"(?m)^\|\s*.+\s*\|",
+        ] {
+            rules.push(make_content_rule(id, "markdown", pat, 2, 18));
+            id += 1;
+        }
+
+        rules
+    }
+
+    // ── compile_context_rules ─────────────────────────────────────────────────
+
+    #[test]
+    fn compile_context_rules_drops_when_both_patterns_none() {
+        let rule = make_context_rule(1, Some(10), None, None, 50);
+        let compiled = compile_context_rules(vec![rule]);
+        assert!(compiled.is_empty());
+    }
+
+    #[test]
+    fn compile_context_rules_drops_invalid_source_app_regex() {
+        let rule = make_context_rule(1, Some(10), Some("[invalid("), None, 50);
+        let compiled = compile_context_rules(vec![rule]);
+        assert!(compiled.is_empty());
+    }
+
+    #[test]
+    fn compile_context_rules_keeps_source_app_only() {
+        let rule = make_context_rule(1, Some(10), Some("code"), None, 50);
+        let compiled = compile_context_rules(vec![rule]);
+        assert_eq!(compiled.len(), 1);
+        assert!(compiled[0].source_app_re.is_some());
+        assert!(compiled[0].window_title_re.is_none());
+    }
+
+    #[test]
+    fn compile_context_rules_keeps_window_title_only() {
+        let rule = make_context_rule(1, Some(10), None, Some("editor"), 50);
+        let compiled = compile_context_rules(vec![rule]);
+        assert_eq!(compiled.len(), 1);
+        assert!(compiled[0].source_app_re.is_none());
+        assert!(compiled[0].window_title_re.is_some());
+    }
+
+    // ── compile_content_rules ─────────────────────────────────────────────────
+
+    #[test]
+    fn compile_content_rules_groups_same_type_together() {
+        let rules = vec![
+            make_content_rule(1, "color", r"^#[0-9a-fA-F]{6}$", 1, 25),
+            make_content_rule(2, "color", r"^rgba?\(", 1, 25),
+        ];
+        let groups = compile_content_rules(rules);
+        let color_group = groups.iter().find(|g| g.content_type == "color");
+        assert!(color_group.is_some());
+        assert_eq!(color_group.unwrap().patterns.len(), 2);
+    }
+
+    #[test]
+    fn compile_content_rules_sorts_by_priority_descending() {
+        let rules = vec![
+            make_content_rule(1, "markdown", r"(?m)^#{1,6}\s+\S", 2, 18),
+            make_content_rule(2, "url", r"^(https?|ftp)://\S+", 1, 50),
+            make_content_rule(3, "code", r"(?m)(fn |def )\s*\w", 3, 20),
+        ];
+        let groups = compile_content_rules(rules);
+        assert_eq!(groups[0].content_type, "url");
+        assert_eq!(groups[1].content_type, "code");
+        assert_eq!(groups[2].content_type, "markdown");
+    }
+
+    #[test]
+    fn compile_content_rules_skips_invalid_regex() {
+        let rules = vec![
+            make_content_rule(1, "url", r"^(https?|ftp)://\S+", 1, 50),
+            make_content_rule(2, "bad", r"[invalid(", 1, 99),
+        ];
+        let groups = compile_content_rules(rules);
+        assert!(groups.iter().all(|g| g.content_type != "bad"));
+        assert!(groups.iter().any(|g| g.content_type == "url"));
+    }
+
+    // ── match_content_type ────────────────────────────────────────────────────
+
+    #[test]
+    fn match_content_type_url() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "https://github.com/niconi21/clipboard-tool", 8192);
+        assert_eq!(result, "url");
+    }
+
+    #[test]
+    fn match_content_type_email() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "user@example.com", 8192);
+        assert_eq!(result, "email");
+    }
+
+    #[test]
+    fn match_content_type_phone_valid() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "+1 (555) 123-4567", 8192);
+        assert_eq!(result, "phone");
+    }
+
+    #[test]
+    fn match_content_type_phone_rejects_alpha() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "call 555-HELP-NOW", 8192);
+        assert_ne!(result, "phone");
+    }
+
+    #[test]
+    fn match_content_type_phone_rejects_newline() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "555\n1234567", 8192);
+        assert_ne!(result, "phone");
+    }
+
+    #[test]
+    fn match_content_type_phone_rejects_too_few_digits() {
+        let groups = compile_content_rules(seeded_content_rules());
+        // "123-456" has only 6 digits — below the 7-digit minimum
+        let result = match_content_type(&groups, "123-456", 8192);
+        assert_ne!(result, "phone");
+    }
+
+    #[test]
+    fn match_content_type_color_hex3() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "#fff", 8192);
+        assert_eq!(result, "color");
+    }
+
+    #[test]
+    fn match_content_type_color_hex6() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "#3b82f6", 8192);
+        assert_eq!(result, "color");
+    }
+
+    #[test]
+    fn match_content_type_color_rgba() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "rgba(255, 0, 0, 0.5)", 8192);
+        assert_eq!(result, "color");
+    }
+
+    #[test]
+    fn match_content_type_json() {
+        let groups = compile_content_rules(seeded_content_rules());
+        // Valid JSON object with enough keys to trigger 3+ pattern hits
+        let text = r#"{"name": "Alice", "age": 30, "active": true, "score": null}"#;
+        let result = match_content_type(&groups, text, 8192);
+        assert_eq!(result, "json");
+    }
+
+    #[test]
+    fn match_content_type_sql_select() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let text = "SELECT id, name FROM users WHERE active = 1 ORDER BY name";
+        let result = match_content_type(&groups, text, 8192);
+        assert_eq!(result, "sql");
+    }
+
+    #[test]
+    fn match_content_type_sql_insert() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let text = "INSERT INTO entries (content, content_type) VALUES ('hello', 'text');\n-- end";
+        let result = match_content_type(&groups, text, 8192);
+        assert_eq!(result, "sql");
+    }
+
+    #[test]
+    fn match_content_type_shell() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let text = "#!/bin/bash\ncurl -s https://example.com | grep foo";
+        let result = match_content_type(&groups, text, 8192);
+        assert_eq!(result, "shell");
+    }
+
+    #[test]
+    fn match_content_type_code() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let text = "fn add(a: i32, b: i32) -> i32 {\n    let result = a + b;\n    return result;\n}";
+        let result = match_content_type(&groups, text, 8192);
+        assert_eq!(result, "code");
+    }
+
+    #[test]
+    fn match_content_type_markdown() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let text = "# My Document\n\n- item one\n- item two\n- item three";
+        let result = match_content_type(&groups, text, 8192);
+        assert_eq!(result, "markdown");
+    }
+
+    #[test]
+    fn match_content_type_plain_text_fallback() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "just some plain text here", 8192);
+        assert_eq!(result, "text");
+    }
+
+    #[test]
+    fn match_content_type_max_bytes_truncation() {
+        let groups = compile_content_rules(seeded_content_rules());
+        // URL at the start followed by lots of garbage — the match is within the first 20 bytes
+        // The URL "https://x.com" is 14 bytes, well within the 20-byte window.
+        let mut text = "https://x.com".to_string();
+        text.push_str(&"z".repeat(200));
+        // With max_bytes=20 the slice will contain "https://x.comzzzzzzz" (20 chars)
+        // The URL pattern requires the whole string to start with https:// and have no spaces —
+        // but after truncation the suffix letters are still non-space, so it still matches.
+        let result = match_content_type(&groups, &text, 20);
+        assert_eq!(result, "url");
+    }
+
+    // ── match_category ────────────────────────────────────────────────────────
+
+    #[test]
+    fn match_category_source_app_only() {
+        let rules = compile_context_rules(vec![make_context_rule(
+            1,
+            Some(42),
+            Some("code"),
+            None,
+            10,
+        )]);
+        let result = match_category(&rules, Some("vscode"), None);
+        assert_eq!(result, Some(42));
+    }
+
+    #[test]
+    fn match_category_window_title_only() {
+        let rules = compile_context_rules(vec![make_context_rule(
+            1,
+            Some(7),
+            None,
+            Some("vim"),
+            10,
+        )]);
+        let result = match_category(&rules, None, Some("init.vim - nvim"));
+        assert_eq!(result, Some(7));
+    }
+
+    #[test]
+    fn match_category_both_required_both_match() {
+        let rules = compile_context_rules(vec![make_context_rule(
+            1,
+            Some(5),
+            Some("terminal"),
+            Some("bash"),
+            10,
+        )]);
+        let result = match_category(&rules, Some("terminal"), Some("bash shell"));
+        assert_eq!(result, Some(5));
+    }
+
+    #[test]
+    fn match_category_both_required_one_missing() {
+        let rules = compile_context_rules(vec![make_context_rule(
+            1,
+            Some(5),
+            Some("terminal"),
+            Some("bash"),
+            10,
+        )]);
+        // source_app matches but window_title does not
+        let result = match_category(&rules, Some("terminal"), Some("python repl"));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn match_category_highest_priority_wins() {
+        // All three rules match the source_app "firefox" via a broad pattern.
+        // The rule with priority=100 should win.
+        let rules = compile_context_rules(vec![
+            make_context_rule(1, Some(1), Some("fire"), None, 5),
+            make_context_rule(2, Some(99), Some("fire"), None, 100),
+            make_context_rule(3, Some(50), Some("fire"), None, 10),
+        ]);
+        let result = match_category(&rules, Some("firefox"), None);
+        assert_eq!(result, Some(99));
+    }
+
+    #[test]
+    fn match_category_no_rules_returns_none() {
+        let result = match_category(&[], Some("any-app"), Some("any title"));
+        assert_eq!(result, None);
+    }
+
+    // ── default_category_for_type ─────────────────────────────────────────────
+
+    #[test]
+    fn default_category_code_is_development() {
+        assert_eq!(default_category_for_type("code"), Some("development"));
+    }
+
+    #[test]
+    fn default_category_sql_is_development() {
+        assert_eq!(default_category_for_type("sql"), Some("development"));
+    }
+
+    #[test]
+    fn default_category_json_is_development() {
+        assert_eq!(default_category_for_type("json"), Some("development"));
+    }
+
+    #[test]
+    fn default_category_shell_is_development() {
+        assert_eq!(default_category_for_type("shell"), Some("development"));
+    }
+
+    #[test]
+    fn default_category_markdown_is_document() {
+        assert_eq!(default_category_for_type("markdown"), Some("document"));
+    }
+
+    #[test]
+    fn default_category_url_is_none() {
+        assert_eq!(default_category_for_type("url"), None);
+    }
+
+    #[test]
+    fn default_category_text_is_none() {
+        assert_eq!(default_category_for_type("text"), None);
+    }
+
+    // ── compile_collection_rules ──────────────────────────────────────────────
+
+    #[test]
+    fn compile_collection_rules_drops_all_none() {
+        let rule = CollectionRuleRaw {
+            collection_id: 1,
+            content_type: None,
+            source_app: None,
+            window_title: None,
+            content_pattern: None,
+        };
+        let compiled = compile_collection_rules(vec![rule]);
+        assert!(compiled.is_empty());
+    }
+
+    #[test]
+    fn compile_collection_rules_keeps_with_one_criterion() {
+        let rule = CollectionRuleRaw {
+            collection_id: 1,
+            content_type: Some("url".to_string()),
+            source_app: None,
+            window_title: None,
+            content_pattern: None,
+        };
+        let compiled = compile_collection_rules(vec![rule]);
+        assert_eq!(compiled.len(), 1);
+    }
+
+    // ── match_collections ─────────────────────────────────────────────────────
+
+    #[test]
+    fn match_collections_by_content_type() {
+        let rules = compile_collection_rules(vec![CollectionRuleRaw {
+            collection_id: 10,
+            content_type: Some("url".to_string()),
+            source_app: None,
+            window_title: None,
+            content_pattern: None,
+        }]);
+        let ids = match_collections(&rules, "https://example.com", "url", None, None);
+        assert_eq!(ids, vec![10]);
+    }
+
+    #[test]
+    fn match_collections_type_mismatch_returns_empty() {
+        let rules = compile_collection_rules(vec![CollectionRuleRaw {
+            collection_id: 10,
+            content_type: Some("url".to_string()),
+            source_app: None,
+            window_title: None,
+            content_pattern: None,
+        }]);
+        let ids = match_collections(&rules, "hello world", "text", None, None);
+        assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn match_collections_by_content_pattern() {
+        let rules = compile_collection_rules(vec![CollectionRuleRaw {
+            collection_id: 20,
+            content_type: None,
+            source_app: None,
+            window_title: None,
+            content_pattern: Some(r"secret".to_string()),
+        }]);
+        let ids = match_collections(&rules, "my secret key is here", "text", None, None);
+        assert_eq!(ids, vec![20]);
+    }
+
+    #[test]
+    fn match_collections_and_logic_type_matches_pattern_doesnt() {
+        // content_type matches "url" but content_pattern requires "github" which isn't present
+        let rules = compile_collection_rules(vec![CollectionRuleRaw {
+            collection_id: 30,
+            content_type: Some("url".to_string()),
+            source_app: None,
+            window_title: None,
+            content_pattern: Some(r"github\.com".to_string()),
+        }]);
+        let ids = match_collections(&rules, "https://example.com", "url", None, None);
+        assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn match_collections_dedup_same_collection_id() {
+        // Two rules for the same collection_id — both match — should appear only once
+        let rules = compile_collection_rules(vec![
+            CollectionRuleRaw {
+                collection_id: 5,
+                content_type: Some("url".to_string()),
+                source_app: None,
+                window_title: None,
+                content_pattern: None,
+            },
+            CollectionRuleRaw {
+                collection_id: 5,
+                content_type: None,
+                source_app: None,
+                window_title: None,
+                content_pattern: Some(r"example".to_string()),
+            },
+        ]);
+        let ids = match_collections(&rules, "https://example.com", "url", None, None);
+        assert_eq!(ids, vec![5]);
+    }
 }

@@ -3,7 +3,7 @@ mod categorizer;
 mod clipboard;
 mod commands;
 mod context;
-mod db;
+pub mod db;
 mod window_state;
 
 use audit::{AppLog, AuditLog};

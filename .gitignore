@@ -23,6 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# Test results & coverage
+coverage/
+*.lcov
+
 # Tauri
 src-tauri/target/
 src-tauri/gen/schemas
