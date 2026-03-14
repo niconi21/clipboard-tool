@@ -228,34 +228,39 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             .await,
     )?;
 
-    // Subcollections: add subcollection_id column to entry_collections (existing DBs)
-    ignore_duplicate_column(
-        sqlx::query("ALTER TABLE entry_collections ADD COLUMN subcollection_id INTEGER REFERENCES subcollections(id)")
-            .execute(pool)
-            .await,
-    )?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_ec_subcollection ON entry_collections(subcollection_id)")
-        .execute(pool)
+    // Subcollections migration: use a single connection so all queries see the
+    // ALTER TABLE schema change (pooled connections may cache stale schemas).
+    {
+        let mut conn = pool.acquire().await?;
+
+        ignore_duplicate_column(
+            sqlx::query("ALTER TABLE entry_collections ADD COLUMN subcollection_id INTEGER REFERENCES subcollections(id)")
+                .execute(&mut *conn)
+                .await,
+        )?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_ec_subcollection ON entry_collections(subcollection_id)")
+            .execute(&mut *conn)
+            .await?;
+
+        // Seed default subcollection for every collection that doesn't have one yet
+        sqlx::query(
+            "INSERT OR IGNORE INTO subcollections (collection_id, name, is_default)
+             SELECT id, 'Sin clasificar', 1 FROM collections
+             WHERE id NOT IN (SELECT collection_id FROM subcollections WHERE is_default = 1)"
+        )
+        .execute(&mut *conn)
         .await?;
 
-    // Seed default subcollection for every collection that doesn't have one yet
-    sqlx::query(
-        "INSERT OR IGNORE INTO subcollections (collection_id, name, is_default)
-         SELECT id, 'Sin clasificar', 1 FROM collections
-         WHERE id NOT IN (SELECT collection_id FROM subcollections WHERE is_default = 1)"
-    )
-    .execute(pool)
-    .await?;
-
-    // Backfill: assign default subcollection to entry_collections rows missing one
-    sqlx::query(
-        "UPDATE entry_collections SET subcollection_id = (
-            SELECT s.id FROM subcollections s
-            WHERE s.collection_id = entry_collections.collection_id AND s.is_default = 1
-        ) WHERE subcollection_id IS NULL"
-    )
-    .execute(pool)
-    .await?;
+        // Backfill: assign default subcollection to entry_collections rows missing one
+        sqlx::query(
+            "UPDATE entry_collections SET subcollection_id = (
+                SELECT s.id FROM subcollections s
+                WHERE s.collection_id = entry_collections.collection_id AND s.is_default = 1
+            ) WHERE subcollection_id IS NULL"
+        )
+        .execute(&mut *conn)
+        .await?;
+    }
 
     // FK dependency order:
     //   categories      → before context_rules (context_rules.category_id)
@@ -374,9 +379,8 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_ec_subcollection ON entry_collections(subcollection_id)")
-        .execute(pool)
-        .await?;
+    // Note: idx_ec_subcollection index is created in run_migrations()
+    // AFTER the ALTER TABLE that adds subcollection_id (for existing DBs).
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS context_rules (
@@ -470,12 +474,14 @@ async fn create_fresh_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     // Deduplicate Favorites: if old code inserted multiple builtin rows, keep the one
     // with the lowest id and migrate any entry_collections rows to it before deleting.
     //
-    // Step 1: re-point entries from duplicate Favorites ids to the canonical (MIN) id
+    // Step 1: re-point entries from duplicate Favorites ids to the canonical (MIN) id.
+    // Note: does NOT reference subcollection_id here — the column may not exist yet
+    // on databases upgrading from v1.1.0. The subcollection backfill runs later
+    // in run_migrations() after ALTER TABLE adds the column.
     sqlx::query(
-        "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id, subcollection_id)
+        "INSERT OR IGNORE INTO entry_collections (entry_id, collection_id)
          SELECT entry_id,
-                (SELECT MIN(id) FROM collections WHERE is_builtin = 1 AND name = 'Favorites'),
-                subcollection_id
+                (SELECT MIN(id) FROM collections WHERE is_builtin = 1 AND name = 'Favorites')
          FROM entry_collections
          WHERE collection_id IN (
              SELECT id FROM collections
