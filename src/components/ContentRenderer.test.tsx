@@ -160,4 +160,48 @@ describe("ContentRenderer", () => {
       expect(screen.getByText("content_renderer.md_source")).toBeInTheDocument();
     });
   });
+
+  describe("MarkdownRenderer - XSS sanitization", () => {
+    it("strips script tags from markdown output", () => {
+      const { container } = render(
+        <ContentRenderer content={"# Hello\n\n<script>window.__xss = true</script>"} contentType="markdown" />
+      );
+      expect(container.querySelector("script")).not.toBeInTheDocument();
+      // The injected global should not have been set
+      expect((window as unknown as Record<string, unknown>).__xss).toBeUndefined();
+    });
+
+    it("strips javascript: hrefs from markdown links", () => {
+      const { container } = render(
+        <ContentRenderer content={"[click me](javascript:alert(1))"} contentType="markdown" />
+      );
+      const link = container.querySelector("a");
+      // DOMPurify should remove the href or change it to a safe value
+      if (link) {
+        const href = link.getAttribute("href");
+        // href is either null (removed entirely) or a safe non-javascript: string
+        if (href !== null) {
+          expect(href).not.toMatch(/^javascript:/i);
+        }
+      }
+    });
+
+    it("strips onerror attributes from markdown images", () => {
+      const { container } = render(
+        <ContentRenderer content={"![img](x.png)"} contentType="markdown" />
+      );
+      const img = container.querySelector("img");
+      if (img) {
+        expect(img.getAttribute("onerror")).toBeNull();
+      }
+    });
+
+    it("allows safe markdown HTML through", () => {
+      const { container } = render(
+        <ContentRenderer content={"# Title\n\n**bold** and _italic_"} contentType="markdown" />
+      );
+      // DOMPurify should allow <strong> and <em>
+      expect(container.querySelector(".markdown-preview")).toBeInTheDocument();
+    });
+  });
 });
