@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-03-13
+
+### Fixed
+- fix: startup crash on upgrade from v1.1.0 — `subcollection_id` column referenced before ALTER TABLE migration added it to `entry_collections`
+
+
 ## [1.2.0] - 2026-03-13
 
 ### Added
