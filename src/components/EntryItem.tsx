@@ -78,7 +78,7 @@ export const EntryItem = memo(function EntryItem({
         const label = labelFor(entry.content_type);
         const snippet = entry.content_type === "image"
           ? ""
-          : (entry.alias ?? entry.content).slice(0, 15).replaceAll("\n", " ");
+          : (entry.alias ?? entry.content).slice(0, 45).replaceAll("\n", " ");
 
         const ghost = document.createElement("div");
         ghost.style.cssText = "position:fixed;top:-200px;left:-200px;display:inline-flex;align-items:center;gap:6px;padding:5px 10px 5px 6px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.15);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.65);pointer-events:none;white-space:nowrap;";
@@ -91,7 +91,7 @@ export const EntryItem = memo(function EntryItem({
 
         if (snippet) {
           const text = document.createElement("span");
-          text.textContent = snippet.length < (entry.alias ?? entry.content).length ? snippet + "…" : snippet;
+          text.textContent = (entry.alias ?? entry.content).length > 45 ? snippet + "…" : snippet;
           text.style.cssText = "font-size:11px;color:rgba(255,255,255,0.75);font-family:ui-monospace,monospace;";
           ghost.appendChild(text);
         }
