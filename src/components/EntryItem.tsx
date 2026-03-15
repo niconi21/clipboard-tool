@@ -106,6 +106,17 @@ export const EntryItem = memo(function EntryItem({
       onDragEnd={onDragEnd}
       onClick={() => onSelect(entry)}
     >
+      {/* Drag handle — visible on hover when draggable */}
+      {onDragStart && (
+        <div className="absolute left-0 inset-y-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity pl-1 pointer-events-none">
+          <svg className="w-2.5 h-2.5 text-content-3" viewBox="0 0 10 16" fill="currentColor">
+            <circle cx="2" cy="2" r="1.5" /><circle cx="8" cy="2" r="1.5" />
+            <circle cx="2" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" />
+            <circle cx="2" cy="14" r="1.5" /><circle cx="8" cy="14" r="1.5" />
+          </svg>
+        </div>
+      )}
+
       {/* Type badge */}
       <span
         className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide"

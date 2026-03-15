@@ -14,6 +14,7 @@ interface Props {
   onDelete: (id: number) => Promise<void>;
   onDropEntry?: (entryId: number, subcollectionId: number) => void;
   isDragging?: boolean;
+  currentSubcollectionId?: number | null;
 }
 
 export function SubcollectionPanel({
@@ -27,6 +28,7 @@ export function SubcollectionPanel({
   onDelete,
   onDropEntry,
   isDragging,
+  currentSubcollectionId,
 }: Props) {
   const { t } = useTranslation();
   const [newName, setNewName] = useState("");
@@ -122,9 +124,9 @@ export function SubcollectionPanel({
             ) : (
               <button
                 onClick={() => onSelect(sub.id)}
-                onDragOver={onDropEntry ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverId(sub.id); } : undefined}
+                onDragOver={onDropEntry && sub.id !== currentSubcollectionId ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverId(sub.id); } : undefined}
                 onDragLeave={onDropEntry ? () => setDragOverId(null) : undefined}
-                onDrop={onDropEntry ? (e) => {
+                onDrop={onDropEntry && sub.id !== currentSubcollectionId ? (e) => {
                   e.preventDefault();
                   setDragOverId(null);
                   const id = parseInt(e.dataTransfer.getData("text/plain"), 10);
@@ -133,7 +135,7 @@ export function SubcollectionPanel({
                 className={`flex items-center justify-between gap-1 w-full px-2 py-1.5 rounded text-xs transition-all text-left ${
                   dragOverId === sub.id
                     ? "bg-accent/30 text-accent-text outline outline-1 outline-accent/60"
-                    : isDragging && onDropEntry
+                    : isDragging && onDropEntry && sub.id !== currentSubcollectionId
                     ? "outline outline-1 outline-dashed outline-accent/40 text-content-2"
                     : activeSubcollection === sub.id
                     ? "bg-accent/15 text-accent-text font-medium"

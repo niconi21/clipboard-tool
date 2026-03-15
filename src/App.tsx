@@ -39,6 +39,7 @@ function App() {
   const [counts, setCounts] = useState<{ all: number; favorites: number }>({ all: 0, favorites: 0 });
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [draggingEntry, setDraggingEntry] = useState<ClipboardEntry | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<number | null>(null);
   const { t } = useTranslation();
 
@@ -422,6 +423,11 @@ function App() {
     }
   }
 
+  // IDs de colección a los que el entry arrastrado ya pertenece
+  const draggingEntryCollectionIds = draggingEntry
+    ? new Set(draggingEntry.collection_ids.split(",").map(Number).filter(Boolean))
+    : new Set<number>();
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div
@@ -558,11 +564,11 @@ function App() {
         <TabButton
           active={activeTab === "favorites"}
           onClick={() => handleTabChange("favorites")}
-          dropReady={isDragging && !!favoritesId}
+          dropReady={isDragging && !!favoritesId && !draggingEntryCollectionIds.has(favoritesId!)}
           dragOver={isDragging && dragOverCollectionId === favoritesId}
-          onDragOver={favoritesId ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverCollectionId(favoritesId); } : undefined}
+          onDragOver={favoritesId && !draggingEntryCollectionIds.has(favoritesId) ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverCollectionId(favoritesId); } : undefined}
           onDragLeave={favoritesId ? () => setDragOverCollectionId(null) : undefined}
-          onDrop={favoritesId ? (e) => {
+          onDrop={favoritesId && !draggingEntryCollectionIds.has(favoritesId) ? (e) => {
             e.preventDefault();
             setDragOverCollectionId(null);
             const id = parseInt(e.dataTransfer.getData("text/plain"), 10);
@@ -581,16 +587,16 @@ function App() {
             active={activeTab === col.id}
             onClick={() => handleTabChange(col.id)}
             color={col.color}
-            dropReady={isDragging}
+            dropReady={isDragging && !draggingEntryCollectionIds.has(col.id)}
             dragOver={isDragging && dragOverCollectionId === col.id}
-            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverCollectionId(col.id); }}
+            onDragOver={!draggingEntryCollectionIds.has(col.id) ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverCollectionId(col.id); } : undefined}
             onDragLeave={() => setDragOverCollectionId(null)}
-            onDrop={(e) => {
+            onDrop={!draggingEntryCollectionIds.has(col.id) ? (e) => {
               e.preventDefault();
               setDragOverCollectionId(null);
               const id = parseInt(e.dataTransfer.getData("text/plain"), 10);
               if (!isNaN(id)) handleDropOnCollection(id, col.id);
-            }}
+            } : undefined}
           >
             <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
             {col.name}
@@ -613,6 +619,7 @@ function App() {
             onDelete={removeSubcollection}
             onDropEntry={handleDropOnSubcollection}
             isDragging={isDragging}
+            currentSubcollectionId={activeSubcollection}
           />
         )}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
@@ -631,8 +638,11 @@ function App() {
             onCopy={handleCopy}
             colorFor={colorFor}
             labelFor={labelFor}
-            onDragStart={() => setIsDragging(true)}
-            onDragEnd={() => { setIsDragging(false); setDragOverCollectionId(null); }}
+            onDragStart={(id) => {
+              setDraggingEntry(entries.find((e) => e.id === id) ?? null);
+              setIsDragging(true);
+            }}
+            onDragEnd={() => { setIsDragging(false); setDraggingEntry(null); setDragOverCollectionId(null); }}
           />
         </div>
 
