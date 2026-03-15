@@ -38,6 +38,7 @@ function App() {
   const [activeSubcollection, setActiveSubcollection] = useState<number | null>(null);
   const [counts, setCounts] = useState<{ all: number; favorites: number }>({ all: 0, favorites: 0 });
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<number | null>(null);
   const { t } = useTranslation();
 
@@ -554,7 +555,20 @@ function App() {
           {t("tabs.all")}
           <span className="text-[10px] opacity-60">{counts.all}</span>
         </TabButton>
-        <TabButton active={activeTab === "favorites"} onClick={() => handleTabChange("favorites")}>
+        <TabButton
+          active={activeTab === "favorites"}
+          onClick={() => handleTabChange("favorites")}
+          dropReady={isDragging && !!favoritesId}
+          dragOver={isDragging && dragOverCollectionId === favoritesId}
+          onDragOver={favoritesId ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverCollectionId(favoritesId); } : undefined}
+          onDragLeave={favoritesId ? () => setDragOverCollectionId(null) : undefined}
+          onDrop={favoritesId ? (e) => {
+            e.preventDefault();
+            setDragOverCollectionId(null);
+            const id = parseInt(e.dataTransfer.getData("text/plain"), 10);
+            if (!isNaN(id)) handleDropOnCollection(id, favoritesId);
+          } : undefined}
+        >
           <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
           </svg>
@@ -567,7 +581,8 @@ function App() {
             active={activeTab === col.id}
             onClick={() => handleTabChange(col.id)}
             color={col.color}
-            dragOver={dragOverCollectionId === col.id}
+            dropReady={isDragging}
+            dragOver={isDragging && dragOverCollectionId === col.id}
             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverCollectionId(col.id); }}
             onDragLeave={() => setDragOverCollectionId(null)}
             onDrop={(e) => {
@@ -615,7 +630,8 @@ function App() {
             onCopy={handleCopy}
             colorFor={colorFor}
             labelFor={labelFor}
-            onDragStart={() => {}}
+            onDragStart={() => setIsDragging(true)}
+            onDragEnd={() => { setIsDragging(false); setDragOverCollectionId(null); }}
           />
         </div>
 
@@ -666,6 +682,7 @@ function TabButton({
   onClick,
   color,
   children,
+  dropReady,
   dragOver,
   onDragOver,
   onDragLeave,
@@ -675,16 +692,24 @@ function TabButton({
   onClick: () => void;
   color?: string;
   children: React.ReactNode;
+  dropReady?: boolean;
   dragOver?: boolean;
   onDragOver?: (e: React.DragEvent) => void;
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent) => void;
 }) {
-  const style = active && color && !dragOver
-    ? { backgroundColor: color + "26", color }
-    : dragOver && color
-    ? { backgroundColor: color + "50", color, outline: `1px solid ${color}` }
-    : undefined;
+  // Priority: dragOver > active > dropReady > default
+  let style: React.CSSProperties | undefined;
+  if (dragOver && color) {
+    style = { backgroundColor: color + "40", color, outline: `1px solid ${color}` };
+  } else if (dragOver && !color) {
+    style = undefined; // handled via className
+  } else if (active && color) {
+    style = { backgroundColor: color + "26", color };
+  } else if (dropReady && color) {
+    style = { outline: `1px dashed ${color}80`, color };
+  }
+
   return (
     <button
       onClick={onClick}
@@ -692,9 +717,13 @@ function TabButton({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+      className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all whitespace-nowrap shrink-0 ${
         dragOver && !color
-          ? "bg-accent/30 ring-1 ring-accent/50 text-accent"
+          ? "bg-accent/30 outline outline-1 outline-accent/60 text-accent"
+          : dragOver && color
+          ? ""
+          : dropReady && !color
+          ? "outline outline-1 outline-dashed outline-accent/40 text-content-2"
           : active && !color
           ? "bg-accent/15 text-accent"
           : !active

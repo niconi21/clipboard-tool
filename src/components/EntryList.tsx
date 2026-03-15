@@ -19,6 +19,7 @@ interface Props {
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
   onDragStart?: (entryId: number) => void;
+  onDragEnd?: () => void;
 }
 
 export function EntryList({
@@ -37,6 +38,7 @@ export function EntryList({
   colorFor,
   labelFor,
   onDragStart,
+  onDragEnd,
 }: Props) {
   const { t } = useTranslation();
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -90,6 +92,7 @@ export function EntryList({
           colorFor={colorFor}
           labelFor={labelFor}
           onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
         />
       ))}
 

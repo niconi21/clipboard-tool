@@ -18,6 +18,7 @@ interface Props {
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
   onDragStart?: (entryId: number) => void;
+  onDragEnd?: () => void;
 }
 
 function ImageThumbnail({ path }: { path: string }) {
@@ -55,6 +56,7 @@ export const EntryItem = memo(function EntryItem({
   colorFor,
   labelFor,
   onDragStart,
+  onDragEnd,
 }: Props) {
   const color = colorFor(entry.content_type);
   const { t, i18n } = useTranslation();
@@ -73,10 +75,18 @@ export const EntryItem = memo(function EntryItem({
       }`}
       draggable={!!onDragStart}
       onDragStart={onDragStart ? (e) => {
+        // Custom ghost: small note-card icon, created off-screen so it doesn't flash
+        const ghost = document.createElement("div");
+        ghost.style.cssText = "position:fixed;top:-200px;left:-200px;width:36px;height:36px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.6);";
+        ghost.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
+        document.body.appendChild(ghost);
+        e.dataTransfer.setDragImage(ghost, 18, 18);
+        setTimeout(() => ghost.remove(), 0);
         e.dataTransfer.setData("text/plain", String(entry.id));
         e.dataTransfer.effectAllowed = "copy";
         onDragStart(entry.id);
       } : undefined}
+      onDragEnd={onDragEnd}
       onClick={() => onSelect(entry)}
     >
       {/* Type badge */}
