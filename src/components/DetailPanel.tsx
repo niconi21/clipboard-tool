@@ -41,6 +41,7 @@ export function DetailPanel({ entry, collections, subcollections, contentTypes, 
     below: boolean;
   } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [typeError, setTypeError] = useState(false);
   const [editingAlias, setEditingAlias] = useState(false);
   const [aliasValue, setAliasValue] = useState(entry.alias ?? "");
   const aliasInputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +50,7 @@ export function DetailPanel({ entry, collections, subcollections, contentTypes, 
     setSelectionTooltip(null);
     setEditingAlias(false);
     setAliasValue(entry.alias ?? "");
+    setTypeError(false);
   }, [entry.id, entry.alias]);
 
   useEffect(() => {
@@ -105,28 +107,36 @@ export function DetailPanel({ entry, collections, subcollections, contentTypes, 
     <div className="flex flex-col w-full h-full border-l border-stroke bg-base overflow-hidden">
       {/* Panel header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-stroke shrink-0 gap-2">
-        <select
-          value={entry.content_type}
-          onChange={async (e) => {
-            const newType = e.target.value;
-            if (newType === entry.content_type) return;
-            try {
-              await invoke("update_entry_content_type", { id: entry.id, contentType: newType });
-              onContentTypeChanged?.(entry.id, newType);
-            } catch (err) {
-              console.error("[DetailPanel] content type update failed:", err);
-            }
-          }}
-          title={t("detail.change_type")}
-          className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide shrink-0 cursor-pointer appearance-none border-none outline-none"
-          style={{ backgroundColor: color + "26", color }}
-        >
-          {contentTypes.map((ct) => (
-            <option key={ct.name} value={ct.name}>
-              {ct.label}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1 shrink-0">
+          <select
+            value={entry.content_type}
+            onChange={async (e) => {
+              const newType = e.target.value;
+              if (newType === entry.content_type) return;
+              setTypeError(false);
+              try {
+                await invoke("update_entry_content_type", { id: entry.id, contentType: newType });
+                onContentTypeChanged?.(entry.id, newType);
+              } catch (err) {
+                console.error("[DetailPanel] content type update failed:", err);
+                setTypeError(true);
+                setTimeout(() => setTypeError(false), 3000);
+              }
+            }}
+            title={t("detail.change_type")}
+            className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide cursor-pointer appearance-none border-none outline-none"
+            style={{ backgroundColor: color + "26", color }}
+          >
+            {contentTypes.map((ct) => (
+              <option key={ct.name} value={ct.name}>
+                {ct.label}
+              </option>
+            ))}
+          </select>
+          {typeError && (
+            <span className="text-[10px] text-danger whitespace-nowrap">{t("detail.type_change_error")}</span>
+          )}
+        </div>
 
         {/* Alias field */}
         {editingAlias ? (
