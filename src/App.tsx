@@ -612,6 +612,7 @@ function App() {
             onRename={renameSubcollection}
             onDelete={removeSubcollection}
             onDropEntry={handleDropOnSubcollection}
+            isDragging={isDragging}
           />
         )}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
