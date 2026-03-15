@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- feat(#43): drag & drop entries onto collection tabs to add them to a collection; drag entries onto subcollection rows to move them within a collection
+
 ### Fixed
 - fix: upgrade from v1.0.0/v1.1.0 would silently lose manual content type overrides — `entries.manual_override` column was missing from the ALTER TABLE migration path (only present in fresh installs)
 

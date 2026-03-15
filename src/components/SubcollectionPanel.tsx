@@ -12,6 +12,7 @@ interface Props {
   onCreate: (collectionId: number, name: string) => Promise<Subcollection>;
   onRename: (id: number, name: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  onDropEntry?: (entryId: number, subcollectionId: number) => void;
 }
 
 export function SubcollectionPanel({
@@ -23,12 +24,14 @@ export function SubcollectionPanel({
   onCreate,
   onRename,
   onDelete,
+  onDropEntry,
 }: Props) {
   const { t } = useTranslation();
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [counts, setCounts] = useState<Record<number, number>>({});
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
 
   // Fetch subcollection counts when collectionId or refreshKey changes
   useEffect(() => {
@@ -117,8 +120,18 @@ export function SubcollectionPanel({
             ) : (
               <button
                 onClick={() => onSelect(sub.id)}
+                onDragOver={onDropEntry ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverId(sub.id); } : undefined}
+                onDragLeave={onDropEntry ? () => setDragOverId(null) : undefined}
+                onDrop={onDropEntry ? (e) => {
+                  e.preventDefault();
+                  setDragOverId(null);
+                  const id = parseInt(e.dataTransfer.getData("text/plain"), 10);
+                  if (!isNaN(id)) { onDropEntry(id, sub.id); refreshCounts(); }
+                } : undefined}
                 className={`flex items-center justify-between gap-1 w-full px-2 py-1.5 rounded text-xs transition-colors text-left ${
-                  activeSubcollection === sub.id
+                  dragOverId === sub.id
+                    ? "bg-accent/30 text-accent-text ring-1 ring-accent/50"
+                    : activeSubcollection === sub.id
                     ? "bg-accent/15 text-accent-text font-medium"
                     : "text-content-2 hover:text-content hover:bg-surface-raised"
                 }`}

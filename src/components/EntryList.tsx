@@ -18,6 +18,7 @@ interface Props {
   onCopy: (entry: ClipboardEntry) => void;
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
+  onDragStart?: (entryId: number) => void;
 }
 
 export function EntryList({
@@ -35,6 +36,7 @@ export function EntryList({
   onCopy,
   colorFor,
   labelFor,
+  onDragStart,
 }: Props) {
   const { t } = useTranslation();
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -87,6 +89,7 @@ export function EntryList({
           onCopy={onCopy}
           colorFor={colorFor}
           labelFor={labelFor}
+          onDragStart={onDragStart}
         />
       ))}
 

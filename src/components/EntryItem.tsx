@@ -17,6 +17,7 @@ interface Props {
   onCopy: (entry: ClipboardEntry) => void;
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
+  onDragStart?: (entryId: number) => void;
 }
 
 function ImageThumbnail({ path }: { path: string }) {
@@ -53,6 +54,7 @@ export const EntryItem = memo(function EntryItem({
   onCopy,
   colorFor,
   labelFor,
+  onDragStart,
 }: Props) {
   const color = colorFor(entry.content_type);
   const { t, i18n } = useTranslation();
@@ -69,6 +71,12 @@ export const EntryItem = memo(function EntryItem({
       className={`group relative flex items-start gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
         isSelected ? "bg-surface-active" : "hover:bg-surface-raised"
       }`}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart ? (e) => {
+        e.dataTransfer.setData("text/plain", String(entry.id));
+        e.dataTransfer.effectAllowed = "copy";
+        onDragStart(entry.id);
+      } : undefined}
       onClick={() => onSelect(entry)}
     >
       {/* Type badge */}

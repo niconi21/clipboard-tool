@@ -38,6 +38,7 @@ function App() {
   const [activeSubcollection, setActiveSubcollection] = useState<number | null>(null);
   const [counts, setCounts] = useState<{ all: number; favorites: number }>({ all: 0, favorites: 0 });
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [dragOverCollectionId, setDragOverCollectionId] = useState<number | null>(null);
   const { t } = useTranslation();
 
   // ── Bootstrap ───────────────────────────────────────────────────────────────
@@ -257,6 +258,29 @@ function App() {
       invoke("copy_to_clipboard", { content: entry.content }).catch(console.error);
     }
   }, []);
+
+  async function handleDropOnCollection(entryId: number, collectionId: number) {
+    const entry = entries.find((e) => e.id === entryId);
+    const currentIds = entry
+      ? entry.collection_ids.split(",").map(Number).filter(Boolean)
+      : [];
+    if (currentIds.includes(collectionId)) return;
+    const newIds = [...currentIds, collectionId];
+    await invoke("set_entry_collections", { entryId, collectionIds: newIds }).catch(console.error);
+    patchEntryCollections(entryId, newIds);
+    refreshCollectionCounts();
+    bumpSubCounts();
+  }
+
+  async function handleDropOnSubcollection(entryId: number, subcollectionId: number) {
+    if (activeCollectionId === null) return;
+    await invoke("move_entry_subcollection", {
+      entryId,
+      collectionId: activeCollectionId,
+      subcollectionId,
+    }).catch(console.error);
+    bumpSubCounts();
+  }
 
   function handleSettingChange(key: string, value: string) {
     invoke("update_setting", { key, value }).catch(console.error);
@@ -543,6 +567,15 @@ function App() {
             active={activeTab === col.id}
             onClick={() => handleTabChange(col.id)}
             color={col.color}
+            dragOver={dragOverCollectionId === col.id}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverCollectionId(col.id); }}
+            onDragLeave={() => setDragOverCollectionId(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOverCollectionId(null);
+              const id = parseInt(e.dataTransfer.getData("text/plain"), 10);
+              if (!isNaN(id)) handleDropOnCollection(id, col.id);
+            }}
           >
             <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
             {col.name}
@@ -563,6 +596,7 @@ function App() {
             onCreate={createSubcollection}
             onRename={renameSubcollection}
             onDelete={removeSubcollection}
+            onDropEntry={handleDropOnSubcollection}
           />
         )}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
@@ -581,6 +615,7 @@ function App() {
             onCopy={handleCopy}
             colorFor={colorFor}
             labelFor={labelFor}
+            onDragStart={() => {}}
           />
         </div>
 
@@ -631,21 +666,36 @@ function TabButton({
   onClick,
   color,
   children,
+  dragOver,
+  onDragOver,
+  onDragLeave,
+  onDrop,
 }: {
   active: boolean;
   onClick: () => void;
   color?: string;
   children: React.ReactNode;
+  dragOver?: boolean;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: () => void;
+  onDrop?: (e: React.DragEvent) => void;
 }) {
-  const style = active && color
+  const style = active && color && !dragOver
     ? { backgroundColor: color + "26", color }
+    : dragOver && color
+    ? { backgroundColor: color + "50", color, outline: `1px solid ${color}` }
     : undefined;
   return (
     <button
       onClick={onClick}
       style={style}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
       className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-        active && !color
+        dragOver && !color
+          ? "bg-accent/30 ring-1 ring-accent/50 text-accent"
+          : active && !color
           ? "bg-accent/15 text-accent"
           : !active
           ? "text-content-3 hover:text-content-2 hover:bg-surface-raised"
