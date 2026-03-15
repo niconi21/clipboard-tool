@@ -75,12 +75,29 @@ export const EntryItem = memo(function EntryItem({
       }`}
       draggable={!!onDragStart}
       onDragStart={onDragStart ? (e) => {
-        // Custom ghost: small note-card icon, created off-screen so it doesn't flash
+        const label = labelFor(entry.content_type);
+        const snippet = entry.content_type === "image"
+          ? ""
+          : (entry.alias ?? entry.content).slice(0, 15).replaceAll("\n", " ");
+
         const ghost = document.createElement("div");
-        ghost.style.cssText = "position:fixed;top:-200px;left:-200px;width:36px;height:36px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.6);";
-        ghost.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
+        ghost.style.cssText = "position:fixed;top:-200px;left:-200px;display:inline-flex;align-items:center;gap:6px;padding:5px 10px 5px 6px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.15);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.65);pointer-events:none;white-space:nowrap;";
+
+        const badge = document.createElement("span");
+        badge.textContent = label;
+        badge.style.cssText = `flex-shrink:0;padding:2px 5px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;font-family:system-ui,sans-serif;background:${color}26;color:${color};`;
+
+        ghost.appendChild(badge);
+
+        if (snippet) {
+          const text = document.createElement("span");
+          text.textContent = snippet.length < (entry.alias ?? entry.content).length ? snippet + "…" : snippet;
+          text.style.cssText = "font-size:11px;color:rgba(255,255,255,0.75);font-family:ui-monospace,monospace;";
+          ghost.appendChild(text);
+        }
+
         document.body.appendChild(ghost);
-        e.dataTransfer.setDragImage(ghost, 18, 18);
+        e.dataTransfer.setDragImage(ghost, 14, ghost.offsetHeight / 2 || 14);
         setTimeout(() => ghost.remove(), 0);
         e.dataTransfer.setData("text/plain", String(entry.id));
         e.dataTransfer.effectAllowed = "copy";
