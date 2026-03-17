@@ -388,6 +388,9 @@ pub async fn delete_entry(
             if still_used.0 == 0 {
                 if let Ok(data_dir) = app.path().app_data_dir() {
                     let _ = std::fs::remove_file(data_dir.join(&content));
+                    // Also remove the thumbnail variant
+                    let thumb = content.replace(".png", "_thumb.png");
+                    let _ = std::fs::remove_file(data_dir.join(&thumb));
                 }
             }
         }
@@ -1169,6 +1172,34 @@ pub async fn get_image_base64(app: tauri::AppHandle, path: String) -> Result<Str
     ))
 }
 
+/// Returns a data URI for the thumbnail variant of an image.
+/// Falls back to the full image if the thumbnail doesn't exist yet.
+#[tauri::command]
+pub async fn get_image_thumbnail_base64(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    if path.contains("..") || !path.starts_with("images/") {
+        return Err("Invalid image path".to_string());
+    }
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    // Derive thumbnail path: images/<hash>.png → images/<hash>_thumb.png
+    let thumb_path = path.replace(".png", "_thumb.png");
+    let full_thumb = data_dir.join(&thumb_path);
+
+    // If thumbnail exists, serve it; otherwise fall back to full image
+    let target = if full_thumb.exists() {
+        full_thumb
+    } else {
+        data_dir.join(&path)
+    };
+
+    let bytes = std::fs::read(&target).map_err(|e| format!("Failed to read image: {e}"))?;
+    use base64::Engine;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(&bytes)
+    ))
+}
+
 /// Copy an image back to the system clipboard from its stored PNG file.
 #[tauri::command]
 pub async fn copy_image_to_clipboard(
@@ -1268,4 +1299,97 @@ pub async fn import_config(
 
     app_log.info("import_config", &format!("imported config: {:?}", summary));
     Ok(summary)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── validate_name ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn validate_name_empty() {
+        let result = validate_name("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn validate_name_too_long() {
+        let name = "a".repeat(257);
+        let result = validate_name(&name);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("too long"));
+    }
+
+    #[test]
+    fn validate_name_valid() {
+        assert!(validate_name("My Collection").is_ok());
+    }
+
+    // ── validate_color ────────────────────────────────────────────────────────
+
+    #[test]
+    fn validate_color_valid_6() {
+        assert!(validate_color("#3b82f6").is_ok());
+    }
+
+    #[test]
+    fn validate_color_valid_3() {
+        assert!(validate_color("#fff").is_ok());
+    }
+
+    #[test]
+    fn validate_color_no_hash() {
+        let result = validate_color("3b82f6");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_color_wrong_length() {
+        // "#3b82" is 5 chars — neither 4 nor 7
+        let result = validate_color("#3b82");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_color_invalid_hex() {
+        let result = validate_color("#GGGGGG");
+        assert!(result.is_err());
+    }
+
+    // ── validate_regex_pattern ────────────────────────────────────────────────
+
+    #[test]
+    fn validate_regex_valid() {
+        assert!(validate_regex_pattern(r"^https?://\S+$").is_ok());
+    }
+
+    #[test]
+    fn validate_regex_invalid() {
+        let result = validate_regex_pattern(r"[invalid(");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_regex_too_long() {
+        let pattern = "a".repeat(1001);
+        let result = validate_regex_pattern(&pattern);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("too long"));
+    }
+
+    // ── db_err ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn db_err_row_not_found() {
+        let msg = db_err(sqlx::Error::RowNotFound);
+        assert_eq!(msg, "Record not found");
+    }
+
+    #[test]
+    fn db_err_operation_failed_for_non_db_error() {
+        let msg = db_err(sqlx::Error::PoolTimedOut);
+        assert_eq!(msg, "Operation failed");
+    }
 }

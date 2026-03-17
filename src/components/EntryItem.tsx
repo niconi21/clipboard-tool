@@ -17,6 +17,8 @@ interface Props {
   onCopy: (entry: ClipboardEntry) => void;
   colorFor: (name: string) => string;
   labelFor: (name: string) => string;
+  onDragStart?: (entryId: number) => void;
+  onDragEnd?: () => void;
 }
 
 function ImageThumbnail({ path }: { path: string }) {
@@ -24,7 +26,7 @@ function ImageThumbnail({ path }: { path: string }) {
 
   useEffect(() => {
     if (src) return; // already cached
-    invoke<string>("get_image_base64", { path }).then((data) => {
+    invoke<string>("get_image_thumbnail_base64", { path }).then((data) => {
       imageCache.set(path, data);
       setSrc(data);
     }).catch(() => {});
@@ -53,6 +55,8 @@ export const EntryItem = memo(function EntryItem({
   onCopy,
   colorFor,
   labelFor,
+  onDragStart,
+  onDragEnd,
 }: Props) {
   const color = colorFor(entry.content_type);
   const { t, i18n } = useTranslation();
@@ -69,8 +73,50 @@ export const EntryItem = memo(function EntryItem({
       className={`group relative flex items-start gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
         isSelected ? "bg-surface-active" : "hover:bg-surface-raised"
       }`}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart ? (e) => {
+        const label = labelFor(entry.content_type);
+        const snippet = entry.content_type === "image"
+          ? ""
+          : (entry.alias ?? entry.content).slice(0, 45).replaceAll("\n", " ");
+
+        const ghost = document.createElement("div");
+        ghost.style.cssText = "position:fixed;top:-200px;left:-200px;display:inline-flex;align-items:center;gap:6px;padding:5px 10px 5px 6px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.15);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.65);pointer-events:none;white-space:nowrap;";
+
+        const badge = document.createElement("span");
+        badge.textContent = label;
+        badge.style.cssText = `flex-shrink:0;padding:2px 5px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;font-family:system-ui,sans-serif;background:${color}26;color:${color};`;
+
+        ghost.appendChild(badge);
+
+        if (snippet) {
+          const text = document.createElement("span");
+          text.textContent = (entry.alias ?? entry.content).length > 45 ? snippet + "…" : snippet;
+          text.style.cssText = "font-size:11px;color:rgba(255,255,255,0.75);font-family:ui-monospace,monospace;";
+          ghost.appendChild(text);
+        }
+
+        document.body.appendChild(ghost);
+        e.dataTransfer.setDragImage(ghost, 14, ghost.offsetHeight / 2 || 14);
+        setTimeout(() => ghost.remove(), 0);
+        e.dataTransfer.setData("text/plain", String(entry.id));
+        e.dataTransfer.effectAllowed = "copy";
+        onDragStart(entry.id);
+      } : undefined}
+      onDragEnd={onDragEnd}
       onClick={() => onSelect(entry)}
     >
+      {/* Drag handle — visible on hover when draggable */}
+      {onDragStart && (
+        <div className="absolute left-0 inset-y-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity pl-1 pointer-events-none">
+          <svg className="w-2.5 h-2.5 text-content-3" viewBox="0 0 10 16" fill="currentColor">
+            <circle cx="2" cy="2" r="1.5" /><circle cx="8" cy="2" r="1.5" />
+            <circle cx="2" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" />
+            <circle cx="2" cy="14" r="1.5" /><circle cx="8" cy="14" r="1.5" />
+          </svg>
+        </div>
+      )}
+
       {/* Type badge */}
       <span
         className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide"

@@ -113,3 +113,52 @@ fn center_on_primary(app: &AppHandle, window: &tauri::WebviewWindow, width: u32,
         let _ = window.center();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_before_mark_ready_is_noop() {
+        let state = WindowSaveState::new();
+        state.update(100, 200, 800, 600);
+        let pending = state.pending.lock().unwrap();
+        assert!(pending.is_none(), "update before mark_ready should not store anything");
+    }
+
+    #[test]
+    fn update_after_mark_ready_stores_values() {
+        let state = WindowSaveState::new();
+        state.mark_ready();
+        state.update(100, 200, 800, 600);
+        let pending = state.pending.lock().unwrap();
+        assert!(pending.is_some());
+        let pos = pending.as_ref().unwrap();
+        assert_eq!(pos.x, 100);
+        assert_eq!(pos.y, 200);
+        assert_eq!(pos.width, 800);
+        assert_eq!(pos.height, 600);
+    }
+
+    #[test]
+    fn update_overrides_previous() {
+        let state = WindowSaveState::new();
+        state.mark_ready();
+        state.update(10, 20, 400, 300);
+        state.update(50, 60, 1280, 720);
+        let pending = state.pending.lock().unwrap();
+        let pos = pending.as_ref().unwrap();
+        assert_eq!(pos.x, 50);
+        assert_eq!(pos.y, 60);
+        assert_eq!(pos.width, 1280);
+        assert_eq!(pos.height, 720);
+    }
+
+    #[test]
+    fn mark_ready_idempotent() {
+        let state = WindowSaveState::new();
+        state.mark_ready();
+        state.mark_ready(); // second call must not panic
+        assert!(state.ready.load(std::sync::atomic::Ordering::Relaxed));
+    }
+}

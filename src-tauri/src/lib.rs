@@ -3,7 +3,7 @@ mod categorizer;
 mod clipboard;
 mod commands;
 mod context;
-mod db;
+pub mod db;
 mod window_state;
 
 use audit::{AppLog, AuditLog};
@@ -215,6 +215,7 @@ pub fn run() {
             commands::move_entry_subcollection,
             commands::get_entry_subcollection_ids,
             commands::get_image_base64,
+            commands::get_image_thumbnail_base64,
             commands::copy_image_to_clipboard,
             commands::reclassify_entries,
             commands::export_config,

@@ -193,6 +193,27 @@ pub async fn init_pool(app: &AppHandle) -> Result<SqlitePool, sqlx::Error> {
     Ok(pool)
 }
 
+/// Creates an in-memory SQLite pool with the full schema and seed data applied.
+/// Intended for integration tests only. Dead code in production builds is
+/// removed automatically by LTO + strip in the release profile.
+#[doc(hidden)]
+pub async fn init_test_pool() -> Result<SqlitePool, sqlx::Error> {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await?;
+    run_migrations(&pool).await?;
+    Ok(pool)
+}
+
+/// Runs the full migration pipeline on an existing pool.
+/// Used in upgrade simulation tests to apply current migrations on top of
+/// a manually-constructed previous-version schema.
+#[doc(hidden)]
+pub async fn run_migrations_for_test(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    run_migrations(pool).await
+}
+
 /// Subquery that computes is_favorite from entry_collections (used in SELECT).
 /// Must be used with `entries` in scope (references `entries.id`).
 pub const IS_FAVORITE_SQL: &str = "EXISTS(
@@ -224,6 +245,11 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     // "duplicate column name" error means it's already there — safe to ignore.
     ignore_duplicate_column(
         sqlx::query("ALTER TABLE entries ADD COLUMN alias TEXT")
+            .execute(pool)
+            .await,
+    )?;
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE entries ADD COLUMN manual_override INTEGER NOT NULL DEFAULT 0")
             .execute(pool)
             .await,
     )?;

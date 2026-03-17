@@ -36,6 +36,10 @@ sha2 = "0.10"
 base64 = "0.22"
 tauri-plugin-single-instance = "2"
 
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+tempfile = "3"
+
 [profile.release]
 strip = true
 opt-level = "z"
