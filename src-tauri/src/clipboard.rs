@@ -278,6 +278,21 @@ async fn handle_image_entry(
             }
             return;
         }
+
+        // Generate thumbnail (max 120px height, preserve aspect ratio)
+        let thumb_path = data_dir.join(format!("images/{hash_hex}_thumb.png"));
+        if !thumb_path.exists() {
+            let thumb = image::DynamicImage::from(img_buf).resize(
+                u32::MAX,
+                120,
+                image::imageops::FilterType::Triangle,
+            );
+            if let Err(e) = thumb.save(&thumb_path) {
+                if let Some(log) = app.try_state::<AppLog>() {
+                    log.warn("watcher", &format!("image: failed to save thumbnail: {e}"));
+                }
+            }
+        }
     }
 
     // Image entries skip content classification — always "image", no category

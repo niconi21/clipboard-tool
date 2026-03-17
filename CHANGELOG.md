@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - feat(#43): drag & drop entries onto collection tabs to add them to a collection; drag entries onto subcollection rows to move them within a collection
 
+### Performance
+- perf(#34): generate server-side thumbnails (120px height) for image entries — list scrolling uses `_thumb.png` (~5-15 KB) instead of full PNGs (1-40 MB), reducing IPC payload and webview memory by ~100x
+
 ### Fixed
 - fix(#42): changing content type in DetailPanel now shows a visible error message if the update fails; error auto-dismisses after 3 seconds
 - fix: upgrade from v1.0.0/v1.1.0 would silently lose manual content type overrides — `entries.manual_override` column was missing from the ALTER TABLE migration path (only present in fresh installs)

@@ -26,7 +26,7 @@ function ImageThumbnail({ path }: { path: string }) {
 
   useEffect(() => {
     if (src) return; // already cached
-    invoke<string>("get_image_base64", { path }).then((data) => {
+    invoke<string>("get_image_thumbnail_base64", { path }).then((data) => {
       imageCache.set(path, data);
       setSrc(data);
     }).catch(() => {});
