@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- fix(#54): subcollection counter now updates immediately after reclassifying an entry via drag & drop or the collection selector dropdown; reclassified entries are also removed from the current subcollection view optimistically
+
 ## [1.3.0] - 2026-03-18
 
 ### Added
@@ -16,7 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - perf(#34): generate server-side thumbnails (120px height) for image entries — list scrolling uses `_thumb.png` (~5-15 KB) instead of full PNGs (1-40 MB), reducing IPC payload and webview memory by ~100x
 
 ### Fixed
-- fix(#54): subcollection counter now updates immediately after reclassifying an entry via drag & drop or the collection selector dropdown; reclassified entries are also removed from the current subcollection view optimistically
 - fix(#42): changing content type in DetailPanel now shows a visible error message if the update fails; error auto-dismisses after 3 seconds
 - fix: upgrade from v1.0.0/v1.1.0 would silently lose manual content type overrides — `entries.manual_override` column was missing from the ALTER TABLE migration path (only present in fresh installs)
 - fix: remove stub `@types/testing-library__jest-dom` that caused TS2688 build error (types are now bundled with `@testing-library/jest-dom`)
