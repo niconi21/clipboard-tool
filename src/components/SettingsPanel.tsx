@@ -549,7 +549,7 @@ export function SettingsPanel({
                   <select
                     value={fontFamily}
                     onChange={(e) => onSettingChange("font_family", e.target.value)}
-                    className="bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
+                    className="appearance-none bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content cursor-pointer hover:border-stroke-strong focus:outline-none focus:border-accent transition-colors shrink-0"
                   >
                     <option value="system">{t("settings.appearance.font_system")}</option>
                     <option value="inter">Inter</option>
