@@ -198,7 +198,7 @@ pub fn run() {
             let quit_i = MenuItem::with_id(app, "quit", lbl.quit, true, None::<&str>)?;
             let menu = Menu::with_items(app, &[
                 &toggle_i, &sep1,
-                &pause_5_i, &pause_10_i, &pause_15_i, &pause_custom_i, &pause_indefinite_i,
+                &pause_5_i, &pause_10_i, &pause_15_i, &pause_indefinite_i,
                 &sep2, &resume_i, &sep3,
                 &quit_i,
             ])?;
