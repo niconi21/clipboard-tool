@@ -764,26 +764,31 @@ export function SettingsPanel({
                 </div>
               )}
             </div>
-            <div className="mt-4 pt-4 border-t border-stroke space-y-1.5">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleExport}
-                  disabled={exporting}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
-                >
-                  {t("about.export_button")}
-                </button>
-                <button
-                  onClick={handleImport}
-                  disabled={importing}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
-                >
-                  {t("about.import_button")}
-                </button>
-                {exportDone && <span className="text-xs text-accent">{t("about.export_success")}</span>}
-                {importTotal !== null && <span className="text-xs text-accent">{t("about.import_result", { total: importTotal })}</span>}
+            <div className="mt-4 p-4 rounded-lg bg-surface border border-stroke space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-content">{t("about.config_title")}</p>
+                  <p className="text-xs text-content-3 mt-0.5">{t("about.config_desc")}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleExport}
+                    disabled={exporting}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
+                  >
+                    {t("about.export_button")}
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
+                  >
+                    {t("about.import_button")}
+                  </button>
+                </div>
               </div>
-              <p className="text-[11px] text-content-3">{t("about.config_desc")}</p>
+              {exportDone && <p className="text-xs text-accent">{t("about.export_success")}</p>}
+              {importTotal !== null && <p className="text-xs text-accent">{t("about.import_result", { total: importTotal })}</p>}
             </div>
           </Section>
         )}
@@ -974,26 +979,26 @@ function ReclassifyBlock({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="mt-4 pt-4 border-t border-stroke space-y-2">
-      {!dialog ? (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onOpenDialog}
-              disabled={running}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke hover:border-accent hover:text-accent transition-colors text-content-2 disabled:opacity-50"
-            >
-              {running ? t("settings.reclassify.running") : t("settings.reclassify.button")}
-            </button>
-            {result !== null && (
-              <span className="text-xs text-accent">{t("settings.reclassify.result", { count: result })}</span>
-            )}
-          </div>
-          <p className="text-[11px] text-content-3">{t("settings.reclassify.desc")}</p>
+    <div className="mt-4 p-4 rounded-lg bg-surface border border-stroke space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-content">{t("settings.reclassify.button")}</p>
+          <p className="text-xs text-content-3 mt-0.5">{t("settings.reclassify.desc")}</p>
         </div>
-      ) : (
-        <div className="p-3 rounded-lg bg-surface border border-stroke space-y-3">
-          <p className="text-xs font-medium text-content">{t("settings.reclassify.confirm_title")}</p>
+        <button
+          onClick={onOpenDialog}
+          disabled={running}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50 shrink-0"
+        >
+          {running ? t("settings.reclassify.running") : t("settings.reclassify.button")}
+        </button>
+      </div>
+      {result !== null && (
+        <p className="text-xs text-accent">{t("settings.reclassify.result", { count: result })}</p>
+      )}
+      {dialog && (
+        <div className="p-3 rounded-lg bg-surface-raised border border-stroke space-y-3">
+          <p className="text-sm text-content">{t("settings.reclassify.confirm_title")}</p>
           <label className="flex items-center gap-2 text-xs text-content-2 cursor-pointer">
             <input
               type="checkbox"
@@ -1007,13 +1012,14 @@ function ReclassifyBlock({
             <button
               onClick={onConfirm}
               disabled={running}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-accent-text hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {running ? t("settings.reclassify.running") : t("settings.reclassify.button")}
             </button>
             <button
               onClick={onCloseDialog}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content transition-colors"
+              disabled={running}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content transition-colors disabled:opacity-50"
             >
               {t("common.cancel")}
             </button>
