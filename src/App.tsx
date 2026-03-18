@@ -77,6 +77,21 @@ function App() {
     [boot],
   );
 
+  const FONT_FAMILIES: Record<string, string> = {
+    system: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    inter:  "'Inter', system-ui, sans-serif",
+    mono:   "ui-monospace, 'JetBrains Mono', 'Cascadia Code', monospace",
+    serif:  "Georgia, 'Times New Roman', serif",
+  };
+
+  function applyFontSettings(settings: { key: string; value: string }[]) {
+    const family = settings.find((s) => s.key === "font_family")?.value ?? "system";
+    const size   = settings.find((s) => s.key === "font_size")?.value   ?? "16";
+    const root = document.documentElement;
+    root.style.setProperty("--app-font-family", FONT_FAMILIES[family] ?? FONT_FAMILIES.system);
+    root.style.setProperty("--app-font-size", `${size}px`);
+  }
+
   const runBootstrap = useCallback(() => {
     invoke<BootstrapData>("bootstrap")
       .then((data) => {
@@ -89,6 +104,7 @@ function App() {
         const w = parseInt(data.settings.find((s) => s.key === "detail_panel_width")?.value ?? "", 10);
         if (!isNaN(w)) { setPanelWidth(w); panelWidthRef.current = w; }
 
+        applyFontSettings(data.settings);
         setThemes(data.themes);
         setLocalSettings(data.settings);
         settingsLoadedRef.current = false; // force reload of settings-panel data
@@ -310,11 +326,13 @@ function App() {
   function handleSettingChange(key: string, value: string) {
     invoke("update_setting", { key, value }).catch(console.error);
     // Update local settings cache used by SettingsPanel
-    setLocalSettings((prev) =>
-      prev.some((s) => s.key === key)
+    setLocalSettings((prev) => {
+      const next = prev.some((s) => s.key === key)
         ? prev.map((s) => (s.key === key ? { ...s, value } : s))
-        : [...prev, { key, value, updated_at: "" }]
-    );
+        : [...prev, { key, value, updated_at: "" }];
+      if (key === "font_family" || key === "font_size") applyFontSettings(next);
+      return next;
+    });
     if (key === "language") i18n.changeLanguage(value);
   }
 

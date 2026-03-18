@@ -124,7 +124,16 @@
       "theme_slot_accent": "Accent",
       "theme_slot_accent_text": "Accent text",
       "language_title": "Language",
-      "language_desc": "Select the interface language"
+      "language_desc": "Select the interface language",
+      "typography_title": "Typography",
+      "typography_desc": "Font family and size used across the interface",
+      "font_family_label": "Font family",
+      "font_family_desc": "Changes take effect immediately",
+      "font_system": "System UI",
+      "font_mono": "Monospace",
+      "font_serif": "Serif",
+      "font_size_label": "Font size (px)",
+      "font_size_desc": "Base size: 12–20 px. Scales all text proportionally"
     },
     "content_types": {
       "section_title": "Content Types & Rules",

@@ -315,6 +315,8 @@ export function SettingsPanel({
   const retentionDays = getSetting("retention_days", "0");
   const dedupInterval = getSetting("dedup_interval_minutes", "5");
   const pauseDuration = getSetting("pause_duration_minutes", "30");
+  const fontFamily   = getSetting("font_family", "system");
+  const fontSize     = getSetting("font_size", "16");
   const activeLang = getSetting("language", "en");
 
   return (
@@ -539,6 +541,32 @@ export function SettingsPanel({
                   </button>
                 </>
               )}
+            </Section>
+
+            <Section title={t("settings.appearance.typography_title")} description={t("settings.appearance.typography_desc")}>
+              <div className="p-4 rounded-lg bg-surface border border-stroke space-y-4">
+                <SettingRow label={t("settings.appearance.font_family_label")} description={t("settings.appearance.font_family_desc")}>
+                  <select
+                    value={fontFamily}
+                    onChange={(e) => onSettingChange("font_family", e.target.value)}
+                    className="bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
+                  >
+                    <option value="system">{t("settings.appearance.font_system")}</option>
+                    <option value="inter">Inter</option>
+                    <option value="mono">{t("settings.appearance.font_mono")}</option>
+                    <option value="serif">{t("settings.appearance.font_serif")}</option>
+                  </select>
+                </SettingRow>
+                <div className="border-t border-stroke" />
+                <SettingRow label={t("settings.appearance.font_size_label")} description={t("settings.appearance.font_size_desc")}>
+                  <input
+                    type="number" min="12" max="20" step="1"
+                    value={fontSize}
+                    onChange={(e) => { const v = e.target.value; if (v === "" || (Number(v) >= 12 && Number(v) <= 20)) onSettingChange("font_size", v); }}
+                    className="w-20 bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
+                  />
+                </SettingRow>
+              </div>
             </Section>
 
             {languages.length > 0 && (

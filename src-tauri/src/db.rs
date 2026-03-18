@@ -763,6 +763,8 @@ async fn seed_settings(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("language", "en"),
         ("max_image_size_bytes", "36700160"),
         ("pause_duration_minutes", "30"),
+        ("font_family", "system"),
+        ("font_size", "16"),
     ];
 
     for (key, value) in defaults {

@@ -124,7 +124,16 @@
       "theme_slot_accent": "Acento",
       "theme_slot_accent_text": "Texto acento",
       "language_title": "Idioma",
-      "language_desc": "Selecciona el idioma de la interfaz"
+      "language_desc": "Selecciona el idioma de la interfaz",
+      "typography_title": "Tipografía",
+      "typography_desc": "Fuente y tamaño usados en toda la interfaz",
+      "font_family_label": "Familia tipográfica",
+      "font_family_desc": "Los cambios se aplican de inmediato",
+      "font_system": "Sistema",
+      "font_mono": "Monoespaciada",
+      "font_serif": "Serif",
+      "font_size_label": "Tamaño de fuente (px)",
+      "font_size_desc": "Tamaño base: 12–20 px. Escala todo el texto proporcionalmente"
     },
     "content_types": {
       "section_title": "Tipos de contenido y reglas",
