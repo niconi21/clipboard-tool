@@ -38,6 +38,8 @@ function App() {
   const [activeSubcollection, setActiveSubcollection] = useState<number | null>(null);
   const [counts, setCounts] = useState<{ all: number; favorites: number }>({ all: 0, favorites: 0 });
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // pauseSecsRemaining: null = active, -1 = indefinite, >0 = seconds remaining
+  const [pauseSecsRemaining, setPauseSecsRemaining] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggingEntry, setDraggingEntry] = useState<ClipboardEntry | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<number | null>(null);
@@ -194,6 +196,26 @@ function App() {
       .catch(console.error);
     return () => { cancelled = true; unlisten?.(); };
   }, [loadCounts, refreshCollectionCounts, bumpSubCounts]);
+
+  // ── Pause state — listen to events + countdown ──────────────────────────────
+  useEffect(() => {
+    invoke<number | null>("get_pause_state").then((v) => setPauseSecsRemaining(v ?? null)).catch(() => {});
+    let cancelPaused: (() => void) | null = null;
+    let cancelResumed: (() => void) | null = null;
+    listen<number>("clipboard-paused", (e) => setPauseSecsRemaining(e.payload))
+      .then((fn) => { cancelPaused = fn; }).catch(() => {});
+    listen("clipboard-resumed", () => setPauseSecsRemaining(null))
+      .then((fn) => { cancelResumed = fn; }).catch(() => {});
+    return () => { cancelPaused?.(); cancelResumed?.(); };
+  }, []);
+
+  // Countdown ticker — decrements every second while paused with a timer
+  useEffect(() => {
+    if (pauseSecsRemaining === null || pauseSecsRemaining === -1) return;
+    if (pauseSecsRemaining <= 0) { setPauseSecsRemaining(null); return; }
+    const id = setTimeout(() => setPauseSecsRemaining((s) => (s !== null && s > 0 ? s - 1 : null)), 1000);
+    return () => clearTimeout(id);
+  }, [pauseSecsRemaining]);
 
   // ── Settings panel — lazy load, cached after first open ──────────────────────
   const [categories, setCategories] = useState<Category[]>([]);
@@ -555,6 +577,23 @@ function App() {
         <div className="mx-3 mt-2 px-3 py-2 rounded-md bg-danger/10 border border-danger/30 text-xs text-danger flex items-center justify-between gap-2">
           <span>{deleteError}</span>
           <button onClick={() => setDeleteError(null)} className="shrink-0 hover:opacity-70 transition-opacity">✕</button>
+        </div>
+      )}
+      {pauseSecsRemaining !== null && (
+        <div className="mx-3 mt-2 px-3 py-2 rounded-md bg-accent/10 border border-accent/30 text-xs text-accent flex items-center justify-between gap-2">
+          <span>
+            {pauseSecsRemaining === -1
+              ? t("pause.banner_indefinite")
+              : t("pause.banner_timed", { time: pauseSecsRemaining >= 60
+                  ? `${Math.ceil(pauseSecsRemaining / 60)}m`
+                  : `${pauseSecsRemaining}s` })}
+          </span>
+          <button
+            onClick={() => invoke("resume_clipboard").then(() => setPauseSecsRemaining(null)).catch(console.error)}
+            className="shrink-0 font-medium hover:opacity-70 transition-opacity"
+          >
+            {t("pause.resume")}
+          </button>
         </div>
       )}
       <SearchBar

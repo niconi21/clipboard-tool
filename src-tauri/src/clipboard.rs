@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use arboard::Clipboard;
 use sha2::{Digest, Sha256};
@@ -31,6 +31,48 @@ pub struct AppCopiedImageHash(pub Arc<Mutex<Option<String>>>);
 impl AppCopiedImageHash {
     pub fn new() -> Self {
         Self(Arc::new(Mutex::new(None)))
+    }
+}
+
+/// Clipboard monitoring pause state.
+#[derive(Debug)]
+pub enum PauseState {
+    Active,
+    Indefinite,
+    Until(Instant),
+}
+
+pub struct ClipboardPause(pub Arc<Mutex<PauseState>>);
+
+impl ClipboardPause {
+    pub fn new() -> Self {
+        Self(Arc::new(Mutex::new(PauseState::Active)))
+    }
+}
+
+/// Returns `true` if the watcher should skip this tick (paused).
+/// Handles auto-resume when a timed pause expires.
+fn check_pause(app: &AppHandle) -> bool {
+    let Some(pause) = app.try_state::<ClipboardPause>() else {
+        return false;
+    };
+    let mut guard = pause.0.lock().unwrap();
+    match &*guard {
+        PauseState::Active => false,
+        PauseState::Indefinite => true,
+        PauseState::Until(until) => {
+            if Instant::now() < *until {
+                true
+            } else {
+                *guard = PauseState::Active;
+                drop(guard);
+                let _ = app.emit("clipboard-resumed", ());
+                if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
+                    tray.set_paused(false);
+                }
+                false
+            }
+        }
     }
 }
 
@@ -71,6 +113,11 @@ pub fn start_watcher(app: AppHandle) {
                 .unwrap_or(false);
             let poll_ms = if visible { 500 } else { 2000 };
             std::thread::sleep(Duration::from_millis(poll_ms));
+
+            // ── Pause check — skip clipboard poll when paused ───────────
+            if check_pause(&app) {
+                continue;
+            }
 
             // ── Try text first ──────────────────────────────────────────
             let got_text = match clipboard.get_text() {

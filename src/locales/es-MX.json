@@ -252,6 +252,16 @@
     "count_one": "{{count}} entrada",
     "count_other": "{{count}} entradas"
   },
+  "pause": {
+    "banner_timed": "Monitoreo pausado · reanuda en {{time}}",
+    "banner_indefinite": "Monitoreo pausado",
+    "resume": "Reanudar",
+    "paused_indicator": "Pausado"
+  },
+  "settings_behavior_pause": {
+    "label": "Duración de pausa personalizada (min)",
+    "desc": "Duración que usa la opción \"Pausar N min\" del tray."
+  },
   "validation": {
     "duplicate_name": "Nombre ya en uso",
     "duplicate_id": "ID ya en uso"

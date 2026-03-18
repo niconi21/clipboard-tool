@@ -308,6 +308,7 @@ export function SettingsPanel({
   const maxEntries = getSetting("max_history_entries", "0");
   const retentionDays = getSetting("retention_days", "0");
   const dedupInterval = getSetting("dedup_interval_minutes", "5");
+  const pauseDuration = getSetting("pause_duration_minutes", "30");
   const activeLang = getSetting("language", "en");
 
   return (
@@ -710,6 +711,20 @@ export function SettingsPanel({
                   value={maxImageBytes}
                   onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 0) debouncedSettingChange("max_image_size_bytes", v); }}
                   className="w-28 bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
+                />
+              </SettingRow>
+
+              <div className="border-t border-stroke" />
+
+              <SettingRow
+                label={t("settings_behavior_pause.label")}
+                description={t("settings_behavior_pause.desc")}
+              >
+                <input
+                  type="number" min="1" step="5"
+                  value={pauseDuration}
+                  onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 1) debouncedSettingChange("pause_duration_minutes", v); }}
+                  className="w-24 bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
                 />
               </SettingRow>
             </div>

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(#56): floating scroll-to-top button in entry list — appears after scrolling 200px, fades in/out, smooth scroll on click
 - feat(#57): "Clear history" button in Settings > Behavior — deletes all entries not in any collection (same exemption as auto-cleanup); confirmation dialog; count shown on completion
 - feat(#61): inline duplicate-name validation in Categories, Collections and Content Types managers — border turns red and error message appears immediately; Add button stays disabled until resolved
+- feat(#58): pause clipboard monitoring — tray menu offers Pause 5/10/15/custom min + Resume; banner in main UI shows countdown and Resume button; auto-resumes when timer expires; custom duration configurable in Settings > Behavior
 
 ### Fixed
 - fix(#54): subcollection counter now updates immediately after reclassifying an entry via drag & drop or the collection selector dropdown; reclassified entries are also removed from the current subcollection view optimistically
