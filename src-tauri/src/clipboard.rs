@@ -127,10 +127,9 @@ pub fn start_watcher(app: AppHandle) {
             let poll_ms = if visible { 500 } else { 2000 };
             std::thread::sleep(Duration::from_millis(poll_ms));
 
-            // ── Pause check — skip clipboard poll when paused ───────────
-            if check_pause(&app) {
-                continue;
-            }
+            // ── Pause check — still read clipboard to keep last_content
+            //    in sync, but skip save/emit while paused ─────────────────
+            let paused = check_pause(&app);
 
             // ── Try text first ──────────────────────────────────────────
             let got_text = match clipboard.get_text() {
@@ -139,39 +138,43 @@ pub fn start_watcher(app: AppHandle) {
                         true // text unchanged, skip but don't try image
                     } else if text.len() > MAX_CLIPBOARD_BYTES {
                         let bytes = text.len();
-                        if let Some(audit) = app.try_state::<AuditLog>() {
-                            audit.log(
-                                "entry_oversized",
-                                serde_json::json!({ "bytes": bytes, "limit": MAX_CLIPBOARD_BYTES }),
-                            );
-                        }
-                        if let Some(log) = app.try_state::<AppLog>() {
-                            log.warn("watcher", &format!("entry dropped: {bytes} bytes exceeds {MAX_CLIPBOARD_BYTES} limit"));
+                        if !paused {
+                            if let Some(audit) = app.try_state::<AuditLog>() {
+                                audit.log(
+                                    "entry_oversized",
+                                    serde_json::json!({ "bytes": bytes, "limit": MAX_CLIPBOARD_BYTES }),
+                                );
+                            }
+                            if let Some(log) = app.try_state::<AppLog>() {
+                                log.warn("watcher", &format!("entry dropped: {bytes} bytes exceeds {MAX_CLIPBOARD_BYTES} limit"));
+                            }
                         }
                         last_content = text;
                         true
                     } else {
                         last_content = text.clone();
 
-                        // Skip content copied from app itself
-                        let is_self_copy = if let Some(state) = app.try_state::<AppCopiedContent>() {
-                            let mut app_copied = state.0.lock().unwrap();
-                            if app_copied.as_deref() == Some(text.as_str()) {
-                                *app_copied = None;
-                                true
+                        if !paused {
+                            // Skip content copied from app itself
+                            let is_self_copy = if let Some(state) = app.try_state::<AppCopiedContent>() {
+                                let mut app_copied = state.0.lock().unwrap();
+                                if app_copied.as_deref() == Some(text.as_str()) {
+                                    *app_copied = None;
+                                    true
+                                } else {
+                                    false
+                                }
                             } else {
                                 false
-                            }
-                        } else {
-                            false
-                        };
+                            };
 
-                        if !is_self_copy {
-                            let ctx = get_active_context();
-                            let app_clone = app.clone();
-                            tauri::async_runtime::spawn(async move {
-                                handle_text_entry(app_clone, text, ctx).await;
-                            });
+                            if !is_self_copy {
+                                let ctx = get_active_context();
+                                let app_clone = app.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    handle_text_entry(app_clone, text, ctx).await;
+                                });
+                            }
                         }
                         true
                     }
@@ -198,7 +201,12 @@ pub fn start_watcher(app: AppHandle) {
             if last_image_hash.as_deref() == Some(hash_hex.as_str()) {
                 continue;
             }
+            // Always update hash to stay in sync even when paused
             last_image_hash = Some(hash_hex.clone());
+
+            if paused {
+                continue;
+            }
 
             // Check raw size
             let raw_size = img_data.bytes.len();
