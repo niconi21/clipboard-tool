@@ -8,9 +8,10 @@ interface Props {
   collections: Collection[];
   subcollections: Subcollection[];
   onChanged?: (collectionIds: number[]) => void;
+  onSubcollectionChanged?: () => void;
 }
 
-export function CollectionSelector({ entryId, collections, subcollections, onChanged }: Props) {
+export function CollectionSelector({ entryId, collections, subcollections, onChanged, onSubcollectionChanged }: Props) {
   const { t } = useTranslation();
   // Map: collectionId → subcollectionId
   const [assignments, setAssignments] = useState<Map<number, number>>(new Map());
@@ -62,6 +63,7 @@ export function CollectionSelector({ entryId, collections, subcollections, onCha
       next.set(collectionId, subcollectionId);
       return next;
     });
+    onSubcollectionChanged?.();
   }
 
   if (collections.length === 0) return null;

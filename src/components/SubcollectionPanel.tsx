@@ -130,7 +130,7 @@ export function SubcollectionPanel({
                   e.preventDefault();
                   setDragOverId(null);
                   const id = parseInt(e.dataTransfer.getData("text/plain"), 10);
-                  if (!isNaN(id)) { onDropEntry(id, sub.id); refreshCounts(); }
+                  if (!isNaN(id)) onDropEntry(id, sub.id);
                 } : undefined}
                 className={`flex items-center justify-between gap-1 w-full px-2 py-1.5 rounded text-xs transition-all text-left ${
                   dragOverId === sub.id

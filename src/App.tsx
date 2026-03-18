@@ -666,6 +666,7 @@ function App() {
               loadCounts();
               patchEntryCollections(entryId, collectionIds);
             }}
+                onSubcollectionChanged={bumpSubCounts}
                 onAliasChanged={(entryId, alias) => patchEntryAlias(entryId, alias)}
                 onContentTypeChanged={(entryId, contentType) => {
               patchEntryContentType(entryId, contentType);
