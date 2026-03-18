@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat(#60): live theme editor — color picker changes apply instantly via CSS variables; edit mode auto-saves to DB with 800ms debounce; cancel reverts to active theme; Reset button restores pre-edit colors
 - feat(#62): built-in Light theme — clean light color palette selectable from Settings > Appearance
 
 ### Fixed
