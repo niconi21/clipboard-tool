@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- feat(#62): built-in Light theme — clean light color palette selectable from Settings > Appearance
+
 ### Fixed
 - fix(#54): subcollection counter now updates immediately after reclassifying an entry via drag & drop or the collection selector dropdown; reclassified entries are also removed from the current subcollection view optimistically
 
