@@ -139,6 +139,19 @@ export function SettingsPanel({
   const [themeSaving, setThemeSaving] = useState(false);
   const originalColorsRef = useRef<ThemeColors | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const themeEditorRef = useRef(themeEditor);
+  const revertPreviewRef = useRef<() => void>(() => {});
+  useEffect(() => { themeEditorRef.current = themeEditor; }, [themeEditor]);
+
+  // Revert CSS vars when settings panel closes with an open editor (e.g. X button)
+  useEffect(() => {
+    return () => {
+      if (themeEditorRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        revertPreviewRef.current();
+      }
+    };
+  }, []);
 
   // Apply CSS variables directly for live preview
   function applyPreviewColors(colors: ThemeColors) {
@@ -165,6 +178,7 @@ export function SettingsPanel({
       accent: active.accent, accent_text: active.accent_text,
     });
   }
+  revertPreviewRef.current = revertPreview;
 
   function openThemeEditor(state: { mode: "create" | "edit"; slug?: string; name: string; colors: ThemeColors }) {
     originalColorsRef.current = { ...state.colors };
