@@ -109,6 +109,8 @@
       "theme_name": "Nombre",
       "theme_name_placeholder": "Mi tema",
       "theme_save": "Guardar tema",
+      "theme_autosave": "Los cambios se guardan automáticamente",
+      "theme_reset": "Restablecer",
       "theme_cancel": "Cancelar",
       "theme_slot_base": "Base",
       "theme_slot_surface": "Superficie",

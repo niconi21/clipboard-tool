@@ -137,6 +137,65 @@ export function SettingsPanel({
     colors: ThemeColors;
   } | null>(null);
   const [themeSaving, setThemeSaving] = useState(false);
+  const originalColorsRef = useRef<ThemeColors | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Apply CSS variables directly for live preview
+  function applyPreviewColors(colors: ThemeColors) {
+    const root = document.documentElement.style;
+    root.setProperty("--color-base",           colors.base);
+    root.setProperty("--color-surface",        colors.surface);
+    root.setProperty("--color-surface-raised", colors.surface_raised);
+    root.setProperty("--color-surface-active", colors.surface_active);
+    root.setProperty("--color-stroke",         colors.stroke);
+    root.setProperty("--color-stroke-strong",  colors.stroke_strong);
+    root.setProperty("--color-content",        colors.content);
+    root.setProperty("--color-content-2",      colors.content_2);
+    root.setProperty("--color-content-3",      colors.content_3);
+    root.setProperty("--color-accent",         colors.accent);
+    root.setProperty("--color-accent-text",    colors.accent_text);
+  }
+
+  function revertPreview() {
+    const active = themes.find((t) => t.slug === activeThemeSlug) ?? themes[0];
+    if (active) applyPreviewColors({
+      base: active.base, surface: active.surface, surface_raised: active.surface_raised,
+      surface_active: active.surface_active, stroke: active.stroke, stroke_strong: active.stroke_strong,
+      content: active.content, content_2: active.content_2, content_3: active.content_3,
+      accent: active.accent, accent_text: active.accent_text,
+    });
+  }
+
+  function openThemeEditor(state: { mode: "create" | "edit"; slug?: string; name: string; colors: ThemeColors }) {
+    originalColorsRef.current = { ...state.colors };
+    applyPreviewColors(state.colors);
+    setThemeEditor(state);
+  }
+
+  function handleColorChange(key: keyof ThemeColors, value: string) {
+    if (!themeEditor) return;
+    const newColors = { ...themeEditor.colors, [key]: value };
+    setThemeEditor({ ...themeEditor, colors: newColors });
+    applyPreviewColors(newColors);
+    // Auto-save debounced in edit mode
+    if (themeEditor.mode === "edit" && themeEditor.slug) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(async () => {
+        try {
+          await onUpdateTheme(themeEditor.slug!, themeEditor.name, newColors);
+        } catch (e) {
+          console.error("[ThemeEditor] auto-save failed:", e);
+        }
+      }, 800);
+    }
+  }
+
+  function handleCancelEditor() {
+    clearTimeout(autoSaveTimerRef.current);
+    revertPreview();
+    setThemeEditor(null);
+    originalColorsRef.current = null;
+  }
 
   // Config export/import state
   const [exporting, setExporting] = useState(false);
@@ -275,10 +334,7 @@ export function SettingsPanel({
                         <input
                           type="color"
                           value={themeEditor.colors[key]}
-                          onChange={(e) => setThemeEditor({
-                            ...themeEditor,
-                            colors: { ...themeEditor.colors, [key]: e.target.value },
-                          })}
+                          onChange={(e) => handleColorChange(key, e.target.value)}
                           className="w-8 h-8 rounded border border-stroke cursor-pointer shrink-0 bg-transparent"
                         />
                         <div className="min-w-0">
@@ -297,30 +353,48 @@ export function SettingsPanel({
                   </div>
 
                   <div className="flex items-center gap-2 pt-1">
-                    <button
-                      disabled={themeSaving || !themeEditor.name.trim()}
-                      onClick={async () => {
-                        setThemeSaving(true);
-                        try {
-                          if (themeEditor.mode === "create") {
+                    {themeEditor.mode === "create" ? (
+                      <button
+                        disabled={themeSaving || !themeEditor.name.trim()}
+                        onClick={async () => {
+                          setThemeSaving(true);
+                          try {
                             await onCreateTheme(themeEditor.name.trim(), themeEditor.colors);
-                          } else {
-                            await onUpdateTheme(themeEditor.slug!, themeEditor.name.trim(), themeEditor.colors);
+                            setThemeEditor(null);
+                            originalColorsRef.current = null;
+                          } catch (e) {
+                            console.error("[ThemeEditor] save failed:", e);
+                          } finally {
+                            setThemeSaving(false);
                           }
-                          setThemeEditor(null);
-                        } catch (e) {
-                          console.error("[ThemeEditor] save failed:", e);
-                        } finally {
-                          setThemeSaving(false);
-                        }
-                      }}
-                      className="px-3 py-1.5 text-xs font-medium rounded-lg text-white hover:opacity-90 transition-opacity disabled:opacity-30"
-                      style={{ backgroundColor: themeEditor.colors.accent }}
-                    >
-                      {t("settings.appearance.theme_save")}
-                    </button>
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg text-white hover:opacity-90 transition-opacity disabled:opacity-30"
+                        style={{ backgroundColor: themeEditor.colors.accent }}
+                      >
+                        {t("settings.appearance.theme_save")}
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-content-3 italic">{t("settings.appearance.theme_autosave")}</span>
+                    )}
+                    {themeEditor.mode === "edit" && originalColorsRef.current && (
+                      <button
+                        onClick={() => {
+                          const orig = originalColorsRef.current!;
+                          setThemeEditor({ ...themeEditor, colors: orig });
+                          applyPreviewColors(orig);
+                          clearTimeout(autoSaveTimerRef.current);
+                          autoSaveTimerRef.current = setTimeout(async () => {
+                            try { await onUpdateTheme(themeEditor.slug!, themeEditor.name, orig); }
+                            catch (e) { console.error("[ThemeEditor] reset save failed:", e); }
+                          }, 100);
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg text-content-2 hover:text-content hover:bg-surface-raised transition-colors border border-stroke"
+                      >
+                        {t("settings.appearance.theme_reset")}
+                      </button>
+                    )}
                     <button
-                      onClick={() => setThemeEditor(null)}
+                      onClick={handleCancelEditor}
                       className="px-3 py-1.5 text-xs font-medium rounded-lg text-content-2 hover:text-content hover:bg-surface-raised transition-colors border border-stroke"
                     >
                       {t("settings.appearance.theme_cancel")}
@@ -365,7 +439,7 @@ export function SettingsPanel({
                         <div className="flex items-center gap-1 shrink-0">
                           {/* Duplicate — available on all themes */}
                           <button
-                            onClick={() => setThemeEditor({
+                            onClick={() => openThemeEditor({
                               mode: "create",
                               name: `${theme.name} (copy)`,
                               colors: themeToColors(theme),
@@ -381,7 +455,7 @@ export function SettingsPanel({
                           {!theme.is_builtin && (
                             <>
                               <button
-                                onClick={() => setThemeEditor({ mode: "edit", slug: theme.slug, name: theme.name, colors: themeToColors(theme) })}
+                                onClick={() => openThemeEditor({ mode: "edit", slug: theme.slug, name: theme.name, colors: themeToColors(theme) })}
                                 className="p-1 rounded text-content-3 hover:text-content hover:bg-surface-raised transition-colors"
                                 title={t("settings.appearance.edit_theme")}
                               >
@@ -406,7 +480,7 @@ export function SettingsPanel({
                   </div>
 
                   <button
-                    onClick={() => setThemeEditor({
+                    onClick={() => openThemeEditor({
                       mode: "create",
                       name: "",
                       colors: {
