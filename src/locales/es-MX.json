@@ -260,7 +260,13 @@
   },
   "settings_behavior_pause": {
     "label": "Duración de pausa personalizada (min)",
-    "desc": "Duración que usa la opción \"Pausar N min\" del tray."
+    "desc": "Duración que usan la opción \"Pausar N min\" del tray y el botón.",
+    "monitor_label": "Monitoreo de portapapeles",
+    "status_active": "Activo — capturando cambios del portapapeles",
+    "status_indefinite": "Pausado indefinidamente",
+    "status_timed": "Pausado · reanuda en {{time}}",
+    "pause_n": "Pausar {{n}} min",
+    "pause_indefinite": "Pausar indefinidamente"
   },
   "validation": {
     "duplicate_name": "Nombre ya en uso",

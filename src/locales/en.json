@@ -260,7 +260,13 @@
   },
   "settings_behavior_pause": {
     "label": "Custom pause duration (min)",
-    "desc": "Duration used by the \"Pause N min\" tray option."
+    "desc": "Duration used by the \"Pause N min\" tray and button options.",
+    "monitor_label": "Clipboard monitoring",
+    "status_active": "Active — capturing clipboard changes",
+    "status_indefinite": "Paused indefinitely",
+    "status_timed": "Paused · resumes in {{time}}",
+    "pause_n": "Pause {{n}} min",
+    "pause_indefinite": "Pause indefinitely"
   },
   "validation": {
     "duplicate_name": "Name already in use",

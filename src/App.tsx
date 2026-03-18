@@ -569,6 +569,9 @@ function App() {
             onReclassify={handleReclassify}
             onClearHistory={handleClearHistory}
             onConfigImported={handleConfigImported}
+            pauseSecsRemaining={pauseSecsRemaining}
+            onPause={(minutes) => invoke("pause_clipboard", { minutes: minutes ?? undefined }).then(() => {}).catch(console.error)}
+            onResume={() => invoke("resume_clipboard").then(() => {}).catch(console.error)}
           />
         </div>
       ) : (

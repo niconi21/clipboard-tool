@@ -79,6 +79,9 @@ interface Props {
   onReclassify: (includeOverrides: boolean) => Promise<number>;
   onClearHistory: () => Promise<number>;
   onConfigImported: () => void;
+  pauseSecsRemaining: number | null;
+  onPause: (minutes: number | null) => Promise<void>;
+  onResume: () => Promise<void>;
 }
 
 type Tab = "appearance" | "content-types" | "categories" | "collections" | "behavior" | "about";
@@ -126,6 +129,9 @@ export function SettingsPanel({
   onReclassify,
   onClearHistory,
   onConfigImported,
+  pauseSecsRemaining,
+  onPause,
+  onResume,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
@@ -721,12 +727,56 @@ export function SettingsPanel({
                 description={t("settings_behavior_pause.desc")}
               >
                 <input
-                  type="number" min="1" step="5"
+                  type="number" min="1" step="1"
                   value={pauseDuration}
                   onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 1) debouncedSettingChange("pause_duration_minutes", v); }}
                   className="w-24 bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
                 />
               </SettingRow>
+
+              <div className="border-t border-stroke" />
+
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-content">{t("settings_behavior_pause.monitor_label")}</p>
+                  <p className="text-xs text-content-3 mt-0.5">
+                    {pauseSecsRemaining === null
+                      ? t("settings_behavior_pause.status_active")
+                      : pauseSecsRemaining === -1
+                        ? t("settings_behavior_pause.status_indefinite")
+                        : t("settings_behavior_pause.status_timed", {
+                            time: pauseSecsRemaining >= 60
+                              ? `${Math.ceil(pauseSecsRemaining / 60)}m`
+                              : `${pauseSecsRemaining}s`
+                          })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {pauseSecsRemaining !== null ? (
+                    <button
+                      onClick={() => onResume()}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-accent-text hover:opacity-90 transition-opacity"
+                    >
+                      {t("pause.resume")}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => onPause(Number(pauseDuration) || 30)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors"
+                      >
+                        {t("settings_behavior_pause.pause_n", { n: pauseDuration })}
+                      </button>
+                      <button
+                        onClick={() => onPause(null)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors"
+                      >
+                        {t("settings_behavior_pause.pause_indefinite")}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
             <ReclassifyBlock
               dialog={reclassifyDialog}

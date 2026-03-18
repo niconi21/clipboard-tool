@@ -626,6 +626,7 @@ pub async fn update_setting(
             let _ = tray.pause_5.set_text(lbl.pause_5);
             let _ = tray.pause_10.set_text(lbl.pause_10);
             let _ = tray.pause_15.set_text(lbl.pause_15);
+            let _ = tray.pause_indefinite.set_text(lbl.pause_indefinite);
             let _ = tray.resume.set_text(lbl.resume);
             // Set toggle label based on current window visibility
             let visible = app.get_webview_window("main")

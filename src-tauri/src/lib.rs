@@ -22,6 +22,7 @@ pub struct TrayMenuState {
     pub pause_10: MenuItem<tauri::Wry>,
     pub pause_15: MenuItem<tauri::Wry>,
     pub pause_custom: MenuItem<tauri::Wry>,
+    pub pause_indefinite: MenuItem<tauri::Wry>,
     pub resume: MenuItem<tauri::Wry>,
     pub open_label: std::sync::Mutex<String>,
     pub close_label: std::sync::Mutex<String>,
@@ -34,6 +35,7 @@ impl TrayMenuState {
         let _ = self.pause_10.set_enabled(!paused);
         let _ = self.pause_15.set_enabled(!paused);
         let _ = self.pause_custom.set_enabled(!paused);
+        let _ = self.pause_indefinite.set_enabled(!paused);
         let _ = self.resume.set_enabled(paused);
     }
 
@@ -51,6 +53,7 @@ pub struct TrayLabels {
     pub pause_5: &'static str,
     pub pause_10: &'static str,
     pub pause_15: &'static str,
+    pub pause_indefinite: &'static str,
     pub resume: &'static str,
 }
 
@@ -64,6 +67,7 @@ pub fn tray_labels(lang: &str) -> TrayLabels {
             pause_5: "Pausar 5 min",
             pause_10: "Pausar 10 min",
             pause_15: "Pausar 15 min",
+            pause_indefinite: "Pausar indefinidamente",
             resume: "Reanudar monitoreo",
         },
         _ => TrayLabels {
@@ -73,6 +77,7 @@ pub fn tray_labels(lang: &str) -> TrayLabels {
             pause_5: "Pause 5 min",
             pause_10: "Pause 10 min",
             pause_15: "Pause 15 min",
+            pause_indefinite: "Pause indefinitely",
             resume: "Resume monitoring",
         },
     }
@@ -186,13 +191,14 @@ pub fn run() {
             let pause_10_i = MenuItem::with_id(app, "pause_10", lbl.pause_10, true, None::<&str>)?;
             let pause_15_i = MenuItem::with_id(app, "pause_15", lbl.pause_15, true, None::<&str>)?;
             let pause_custom_i = MenuItem::with_id(app, "pause_custom", format!("Pause {custom_mins} min"), true, None::<&str>)?;
+            let pause_indefinite_i = MenuItem::with_id(app, "pause_indefinite", lbl.pause_indefinite, true, None::<&str>)?;
             let sep2 = tauri::menu::PredefinedMenuItem::separator(app)?;
             let resume_i = MenuItem::with_id(app, "resume", lbl.resume, false, None::<&str>)?;
             let sep3 = tauri::menu::PredefinedMenuItem::separator(app)?;
             let quit_i = MenuItem::with_id(app, "quit", lbl.quit, true, None::<&str>)?;
             let menu = Menu::with_items(app, &[
                 &toggle_i, &sep1,
-                &pause_5_i, &pause_10_i, &pause_15_i, &pause_custom_i,
+                &pause_5_i, &pause_10_i, &pause_15_i, &pause_custom_i, &pause_indefinite_i,
                 &sep2, &resume_i, &sep3,
                 &quit_i,
             ])?;
@@ -204,6 +210,7 @@ pub fn run() {
                 pause_10: pause_10_i,
                 pause_15: pause_15_i,
                 pause_custom: pause_custom_i,
+                pause_indefinite: pause_indefinite_i,
                 resume: resume_i,
                 open_label: std::sync::Mutex::new(lbl.open.to_string()),
                 close_label: std::sync::Mutex::new(lbl.close.to_string()),
@@ -217,6 +224,22 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "toggle" => toggle_window(app),
                     "quit" => app.exit(0),
+                    "pause_indefinite" => {
+                        let pause = app.state::<clipboard::ClipboardPause>();
+                        *pause.0.lock().unwrap() = clipboard::PauseState::Indefinite;
+                        let _ = app.emit("clipboard-paused", -1i64);
+                        if let Some(tray) = app.try_state::<TrayMenuState>() {
+                            tray.set_paused(true);
+                        }
+                        let lang = tauri::async_runtime::block_on(
+                            db::get_setting(&app.state::<DbState>().0, "language")
+                        ).ok().flatten().unwrap_or_else(|| "en".to_string());
+                        let body = match lang.as_str() {
+                            "es-MX" => "Monitoreo pausado indefinidamente",
+                            _ => "Clipboard monitoring paused indefinitely",
+                        };
+                        notify(app, body);
+                    }
                     id @ ("pause_5" | "pause_10" | "pause_15" | "pause_custom") => {
                         let mins: u64 = match id {
                             "pause_5" => 5,
