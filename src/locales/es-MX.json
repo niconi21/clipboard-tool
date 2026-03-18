@@ -252,6 +252,10 @@
     "count_one": "{{count}} entrada",
     "count_other": "{{count}} entradas"
   },
+  "validation": {
+    "duplicate_name": "Nombre ya en uso",
+    "duplicate_id": "ID ya en uso"
+  },
   "about": {
     "description": "Gestor de portapapeles local. Sin sincronización en la nube ni telemetría.",
     "version_label": "Versión",

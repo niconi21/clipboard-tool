@@ -70,6 +70,10 @@ export function CategoriesManager({
     setEditingId(null);
   }
 
+  const newNameError = newName.trim() && categories.some((c) => c.name.toLowerCase() === newName.trim().toLowerCase())
+    ? t("validation.duplicate_name")
+    : null;
+
   const appPatError = validateRegexPattern(newAppPat.trim());
   const titlePatError = validateRegexPattern(newTitlePat.trim());
 
@@ -277,16 +281,19 @@ export function CategoriesManager({
         <p className="text-xs font-medium text-content-2">{t("categories_mgr.new_category")}</p>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full border border-stroke shrink-0" style={{ backgroundColor: newColor }} />
-          <input
-            placeholder={t("categories_mgr.name_placeholder")}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
-            className="flex-1 bg-surface-raised border border-stroke rounded px-2 py-1.5 text-sm text-content placeholder:text-content-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30"
-          />
+          <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+            <input
+              placeholder={t("categories_mgr.name_placeholder")}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !newNameError) handleCreate(); }}
+              className={`w-full bg-surface-raised border rounded px-2 py-1.5 text-sm text-content placeholder:text-content-3 focus:outline-none focus:ring-1 transition-colors ${newNameError ? "border-danger focus:border-danger focus:ring-danger/30" : "border-stroke focus:border-accent focus:ring-accent/30"}`}
+            />
+            {newNameError && <p className="text-[10px] text-danger">{newNameError}</p>}
+          </div>
           <button
             onClick={handleCreate}
-            disabled={!newName.trim()}
+            disabled={!newName.trim() || !!newNameError}
             className="px-3 py-1.5 rounded bg-accent/20 text-accent text-sm font-medium hover:bg-accent/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {t("common.add")}

@@ -252,6 +252,10 @@
     "count_one": "{{count}} entry",
     "count_other": "{{count}} entries"
   },
+  "validation": {
+    "duplicate_name": "Name already in use",
+    "duplicate_id": "ID already in use"
+  },
   "about": {
     "description": "Local-only clipboard manager. No cloud sync, no telemetry.",
     "version_label": "Version",
