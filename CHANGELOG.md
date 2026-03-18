@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - feat(#60): live theme editor — color picker changes apply instantly via CSS variables; edit mode auto-saves to DB with 800ms debounce; cancel reverts to active theme; Reset button restores pre-edit colors
 - feat(#62): built-in Light theme — clean light color palette selectable from Settings > Appearance
+- feat(#55): hide "Sin clasificar" subcollection when it has 0 entries; auto-navigate to "All" if it was active when count drops to 0
+- feat(#56): floating scroll-to-top button in entry list — appears after scrolling 200px, fades in/out, smooth scroll on click
 
 ### Fixed
 - fix(#54): subcollection counter now updates immediately after reclassifying an entry via drag & drop or the collection selector dropdown; reclassified entries are also removed from the current subcollection view optimistically
