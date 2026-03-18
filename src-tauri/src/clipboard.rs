@@ -70,6 +70,19 @@ fn check_pause(app: &AppHandle) -> bool {
                 if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
                     tray.set_paused(false);
                 }
+                let body = tauri::async_runtime::block_on(async {
+                    if let Some(db) = app.try_state::<crate::db::DbState>() {
+                        let lang = crate::db::get_setting(&db.0, "language")
+                            .await.ok().flatten().unwrap_or_else(|| "en".to_string());
+                        match lang.as_str() {
+                            "es-MX" => "Monitoreo de portapapeles reanudado",
+                            _ => "Clipboard monitoring resumed",
+                        }.to_string()
+                    } else {
+                        "Clipboard monitoring resumed".to_string()
+                    }
+                });
+                crate::notify(app, &body);
                 false
             }
         }

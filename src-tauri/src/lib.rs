@@ -95,6 +95,7 @@ pub fn run() {
                 .args(["--minimized"])
                 .build(),
         )
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -135,6 +136,13 @@ pub fn run() {
             app.manage(win_save);
 
             clipboard::start_watcher(app.handle().clone());
+
+            // Startup notification
+            let startup_body = match lang.as_str() {
+                "es-MX" => "Monitoreo de portapapeles iniciado",
+                _ => "Clipboard monitoring started",
+            };
+            notify(app.handle(), startup_body);
 
             // Issue #2: periodic dedup task
             let dedup_handle = app.handle().clone();
@@ -231,6 +239,14 @@ pub fn run() {
                         if let Some(tray) = app.try_state::<TrayMenuState>() {
                             tray.set_paused(true);
                         }
+                        let lang = tauri::async_runtime::block_on(
+                            db::get_setting(&app.state::<DbState>().0, "language")
+                        ).ok().flatten().unwrap_or_else(|| "en".to_string());
+                        let body = match lang.as_str() {
+                            "es-MX" => format!("Monitoreo pausado por {mins} min"),
+                            _ => format!("Clipboard monitoring paused for {mins} min"),
+                        };
+                        notify(app, &body);
                     }
                     "resume" => {
                         let pause = app.state::<clipboard::ClipboardPause>();
@@ -239,6 +255,14 @@ pub fn run() {
                         if let Some(tray) = app.try_state::<TrayMenuState>() {
                             tray.set_paused(false);
                         }
+                        let lang = tauri::async_runtime::block_on(
+                            db::get_setting(&app.state::<DbState>().0, "language")
+                        ).ok().flatten().unwrap_or_else(|| "en".to_string());
+                        let body = match lang.as_str() {
+                            "es-MX" => "Monitoreo de portapapeles reanudado",
+                            _ => "Clipboard monitoring resumed",
+                        };
+                        notify(app, body);
                     }
                     _ => {}
                 })
@@ -377,6 +401,16 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Send a system notification. Silently ignores errors.
+pub fn notify(app: &tauri::AppHandle, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app.notification()
+        .builder()
+        .title("Clipboard Tool")
+        .body(body)
+        .show();
 }
 
 fn toggle_window(app: &tauri::AppHandle) {

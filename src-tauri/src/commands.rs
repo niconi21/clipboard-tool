@@ -1335,17 +1335,39 @@ pub async fn pause_clipboard(
     if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
         tray.update_custom_label(custom_mins);
     }
+    // Notification
+    let lang = crate::db::get_setting(pool, "language").await.ok().flatten().unwrap_or_else(|| "en".to_string());
+    let body = if resume_secs == -1 {
+        match lang.as_str() {
+            "es-MX" => "Monitoreo pausado indefinidamente".to_string(),
+            _ => "Clipboard monitoring paused".to_string(),
+        }
+    } else {
+        let mins = resume_secs / 60;
+        match lang.as_str() {
+            "es-MX" => format!("Monitoreo pausado por {mins} min"),
+            _ => format!("Clipboard monitoring paused for {mins} min"),
+        }
+    };
+    crate::notify(&app, &body);
     Ok(resume_secs)
 }
 
 #[tauri::command]
-pub async fn resume_clipboard(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn resume_clipboard(app: tauri::AppHandle, state: State<'_, DbState>) -> Result<(), String> {
     let pause = app.state::<crate::clipboard::ClipboardPause>();
     *pause.0.lock().unwrap() = crate::clipboard::PauseState::Active;
     let _ = app.emit("clipboard-resumed", ());
     if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
         tray.set_paused(false);
     }
+    // Notification
+    let lang = crate::db::get_setting(&state.0, "language").await.ok().flatten().unwrap_or_else(|| "en".to_string());
+    let body = match lang.as_str() {
+        "es-MX" => "Monitoreo de portapapeles reanudado",
+        _ => "Clipboard monitoring resumed",
+    };
+    crate::notify(&app, body);
     Ok(())
 }
 
