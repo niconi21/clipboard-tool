@@ -803,25 +803,34 @@ export function SettingsPanel({
 // ── Static dependency list ───────────────────────────────────────────────────
 
 const FRONTEND_DEPS: { name: string; version: string; licenseKey: string; url: string }[] = [
-  { name: "React",          version: "19",   licenseKey: "mit",        url: "https://react.dev" },
-  { name: "TypeScript",     version: "5.8",  licenseKey: "apache2",    url: "https://www.typescriptlang.org" },
-  { name: "Tauri JS API",   version: "2",    licenseKey: "mit_apache", url: "https://tauri.app" },
-  { name: "Tailwind CSS",   version: "4",    licenseKey: "mit",        url: "https://tailwindcss.com" },
-  { name: "Vite",           version: "7",    licenseKey: "mit",        url: "https://vitejs.dev" },
-  { name: "i18next",        version: "25",   licenseKey: "mit",        url: "https://www.i18next.com" },
-  { name: "react-i18next",  version: "16",   licenseKey: "mit",        url: "https://react.i18next.com" },
-  { name: "highlight.js",   version: "11",   licenseKey: "bsd3",       url: "https://highlightjs.org" },
+  { name: "React",                    version: "19",   licenseKey: "mit",        url: "https://react.dev" },
+  { name: "TypeScript",               version: "5.8",  licenseKey: "apache2",    url: "https://www.typescriptlang.org" },
+  { name: "Tauri JS API",             version: "2",    licenseKey: "mit_apache", url: "https://tauri.app" },
+  { name: "Tailwind CSS",             version: "4",    licenseKey: "mit",        url: "https://tailwindcss.com" },
+  { name: "Vite",                     version: "7",    licenseKey: "mit",        url: "https://vitejs.dev" },
+  { name: "i18next",                  version: "25",   licenseKey: "mit",        url: "https://www.i18next.com" },
+  { name: "react-i18next",            version: "16",   licenseKey: "mit",        url: "https://react.i18next.com" },
+  { name: "highlight.js",             version: "11",   licenseKey: "bsd3",       url: "https://highlightjs.org" },
+  { name: "marked",                   version: "15",   licenseKey: "mit",        url: "https://marked.js.org" },
+  { name: "DOMPurify",                version: "3",    licenseKey: "apache2",    url: "https://github.com/cure53/DOMPurify" },
+  { name: "@tauri-apps/plugin-opener",version: "2",    licenseKey: "mit_apache", url: "https://tauri.app" },
 ];
 
 const BACKEND_DEPS: { name: string; version: string; licenseKey: string; url: string }[] = [
-  { name: "Rust",    version: "1.77+",  licenseKey: "mit_apache", url: "https://www.rust-lang.org" },
-  { name: "Tauri",   version: "2",      licenseKey: "mit_apache", url: "https://tauri.app" },
-  { name: "SQLite",  version: "3",      licenseKey: "public_domain", url: "https://sqlite.org" },
-  { name: "sqlx",    version: "0.8",    licenseKey: "mit_apache", url: "https://github.com/launchbadge/sqlx" },
-  { name: "arboard", version: "3",      licenseKey: "mit_apache", url: "https://github.com/1Password/arboard" },
-  { name: "tokio",   version: "1",      licenseKey: "mit",        url: "https://tokio.rs" },
-  { name: "regex",   version: "1",      licenseKey: "mit_apache", url: "https://github.com/rust-lang/regex" },
-  { name: "serde",   version: "1",      licenseKey: "mit_apache", url: "https://serde.rs" },
+  { name: "Rust",                        version: "1.77+", licenseKey: "mit_apache",    url: "https://www.rust-lang.org" },
+  { name: "Tauri",                       version: "2",     licenseKey: "mit_apache",    url: "https://tauri.app" },
+  { name: "SQLite",                      version: "3",     licenseKey: "public_domain", url: "https://sqlite.org" },
+  { name: "sqlx",                        version: "0.8",   licenseKey: "mit_apache",    url: "https://github.com/launchbadge/sqlx" },
+  { name: "arboard",                     version: "3",     licenseKey: "mit_apache",    url: "https://github.com/1Password/arboard" },
+  { name: "tokio",                       version: "1",     licenseKey: "mit",           url: "https://tokio.rs" },
+  { name: "regex",                       version: "1",     licenseKey: "mit_apache",    url: "https://github.com/rust-lang/regex" },
+  { name: "serde",                       version: "1",     licenseKey: "mit_apache",    url: "https://serde.rs" },
+  { name: "serde_json",                  version: "1",     licenseKey: "mit_apache",    url: "https://github.com/serde-rs/json" },
+  { name: "image",                       version: "0.25",  licenseKey: "mit_apache",    url: "https://github.com/image-rs/image" },
+  { name: "sha2",                        version: "0.10",  licenseKey: "mit_apache",    url: "https://github.com/RustCrypto/hashes" },
+  { name: "base64",                      version: "0.22",  licenseKey: "mit_apache",    url: "https://github.com/marshallpierce/rust-base64" },
+  { name: "tauri-plugin-dialog",         version: "2",     licenseKey: "mit_apache",    url: "https://tauri.app" },
+  { name: "tauri-plugin-single-instance",version: "2",     licenseKey: "mit_apache",    url: "https://tauri.app" },
 ];
 
 function AboutTab() {
