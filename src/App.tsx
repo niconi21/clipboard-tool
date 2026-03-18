@@ -111,7 +111,7 @@ function App() {
   const [subCountKey, setSubCountKey] = useState(0);
   const bumpSubCounts = useCallback(() => setSubCountKey((k) => k + 1), []);
 
-  const { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType, removeEntryFromView } = useClipboard(
+  const { entries, loading, loadingMore, hasMore, loadMore, reloadEntries, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType, removeEntryFromView } = useClipboard(
     search, filters, pageSize,
     activeTab === "favorites",
     activeCollectionId,
@@ -388,6 +388,14 @@ function App() {
     return count;
   }
 
+  // ── Clear history ───────────────────────────────────────────────────────────
+  async function handleClearHistory(): Promise<number> {
+    const count = await invoke<number>("clear_history");
+    await reloadEntries();
+    loadCounts();
+    return count;
+  }
+
   // ── Theme CRUD ──────────────────────────────────────────────────────────────
   function colorsToCamel(c: ThemeColors) {
     return {
@@ -537,6 +545,7 @@ function App() {
             onUpdateTheme={handleUpdateTheme}
             onDeleteTheme={handleDeleteTheme}
             onReclassify={handleReclassify}
+            onClearHistory={handleClearHistory}
             onConfigImported={handleConfigImported}
           />
         </div>

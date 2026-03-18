@@ -77,6 +77,7 @@ interface Props {
   onUpdateTheme: (slug: string, name: string, colors: ThemeColors) => Promise<void>;
   onDeleteTheme: (slug: string) => Promise<void>;
   onReclassify: (includeOverrides: boolean) => Promise<number>;
+  onClearHistory: () => Promise<number>;
   onConfigImported: () => void;
 }
 
@@ -123,6 +124,7 @@ export function SettingsPanel({
   onUpdateTheme,
   onDeleteTheme,
   onReclassify,
+  onClearHistory,
   onConfigImported,
 }: Props) {
   const { t } = useTranslation();
@@ -249,6 +251,10 @@ export function SettingsPanel({
   const [reclassifyRunning, setReclassifyRunning] = useState(false);
   const [reclassifyResult, setReclassifyResult] = useState<number | null>(null);
 
+  const [clearHistoryDialog, setClearHistoryDialog] = useState(false);
+  const [clearHistoryRunning, setClearHistoryRunning] = useState(false);
+  const [clearHistoryResult, setClearHistoryResult] = useState<number | null>(null);
+
   async function handleReclassify() {
     setReclassifyRunning(true);
     setReclassifyResult(null);
@@ -261,6 +267,20 @@ export function SettingsPanel({
       setReclassifyRunning(false);
       setReclassifyDialog(false);
       setReclassifyIncludeOverrides(false);
+    }
+  }
+
+  async function handleClearHistory() {
+    setClearHistoryRunning(true);
+    setClearHistoryResult(null);
+    try {
+      const count = await onClearHistory();
+      setClearHistoryResult(count);
+    } catch (e) {
+      console.error("[ClearHistory] failed:", e);
+    } finally {
+      setClearHistoryRunning(false);
+      setClearHistoryDialog(false);
     }
   }
 
@@ -703,6 +723,47 @@ export function SettingsPanel({
               onToggleOverrides={setReclassifyIncludeOverrides}
               onConfirm={handleReclassify}
             />
+
+            {/* Clear history */}
+            <div className="mt-4 p-4 rounded-lg bg-surface border border-stroke space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-content">{t("settings.behavior.clear_history_label")}</p>
+                  <p className="text-xs text-content-3 mt-0.5">{t("settings.behavior.clear_history_desc")}</p>
+                </div>
+                <button
+                  onClick={() => { setClearHistoryDialog(true); setClearHistoryResult(null); }}
+                  disabled={clearHistoryRunning}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50 shrink-0"
+                >
+                  {t("settings.behavior.clear_history_button")}
+                </button>
+              </div>
+              {clearHistoryResult !== null && (
+                <p className="text-xs text-accent">{t("settings.behavior.clear_history_result", { count: clearHistoryResult })}</p>
+              )}
+              {clearHistoryDialog && (
+                <div className="p-3 rounded-lg bg-surface-raised border border-stroke space-y-3">
+                  <p className="text-sm text-content">{t("settings.behavior.clear_history_confirm")}</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleClearHistory}
+                      disabled={clearHistoryRunning}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-accent-text hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {clearHistoryRunning ? t("settings.behavior.clear_history_running") : t("common.delete")}
+                    </button>
+                    <button
+                      onClick={() => setClearHistoryDialog(false)}
+                      disabled={clearHistoryRunning}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content transition-colors disabled:opacity-50"
+                    >
+                      {t("common.cancel")}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="mt-4 pt-4 border-t border-stroke space-y-1.5">
               <div className="flex items-center gap-2">
                 <button

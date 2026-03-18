@@ -152,7 +152,13 @@
       "max_bytes_label": "Máx. bytes a analizar",
       "max_bytes_desc": "El contenido más largo que esto se trunca antes de aplicar patrones. <code>0</code> = sin límite.",
       "max_image_label": "Máx. tamaño de imagen (bytes)",
-      "max_image_desc": "Tamaño máximo de imágenes del portapapeles a capturar. <code>0</code> = sin límite."
+      "max_image_desc": "Tamaño máximo de imágenes del portapapeles a capturar. <code>0</code> = sin límite.",
+      "clear_history_label": "Limpiar historial",
+      "clear_history_desc": "Elimina todas las entradas que no están guardadas en una colección. Las entradas en cualquier colección (incluyendo Favoritos) se conservan.",
+      "clear_history_button": "Limpiar ahora",
+      "clear_history_confirm": "¿Eliminar todas las entradas del historial que no están en ninguna colección? Esta acción no se puede deshacer.",
+      "clear_history_running": "Eliminando…",
+      "clear_history_result": "{{count}} entradas eliminadas"
     },
     "reclassify": {
       "button": "Reclasificar entradas",

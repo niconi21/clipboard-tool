@@ -1301,6 +1301,18 @@ pub async fn import_config(
     Ok(summary)
 }
 
+#[tauri::command]
+pub async fn clear_history(
+    app: tauri::AppHandle,
+    state: State<'_, DbState>,
+) -> Result<u64, String> {
+    let deleted = crate::db::clear_history(&state.0).await.map_err(db_err)?;
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        let _ = crate::db::cleanup_orphaned_images(&data_dir, &state.0).await;
+    }
+    Ok(deleted)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -155,5 +155,5 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
     });
   }, []);
 
-  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType, removeEntryFromView };
+  return { entries, loading, loadingMore, hasMore, loadMore, reloadEntries: load, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType, removeEntryFromView };
 }

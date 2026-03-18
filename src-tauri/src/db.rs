@@ -1246,6 +1246,18 @@ pub async fn cleanup_entries(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// Delete all entries that are not in any collection (same exemption as auto-cleanup).
+/// Returns the number of rows deleted.
+pub async fn clear_history(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(
+        "DELETE FROM entries
+         WHERE id NOT IN (SELECT entry_id FROM entry_collections)",
+    )
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
 /// Delete image files in `<app_data>/images/` that are no longer referenced by any entry.
 pub async fn cleanup_orphaned_images(
     app_data_dir: &std::path::Path,

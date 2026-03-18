@@ -152,7 +152,13 @@
       "max_bytes_label": "Max bytes to analyze",
       "max_bytes_desc": "Content longer than this is truncated before pattern matching. <code>0</code> = no limit.",
       "max_image_label": "Max image size (bytes)",
-      "max_image_desc": "Maximum raw size of clipboard images to capture. <code>0</code> = no limit."
+      "max_image_desc": "Maximum raw size of clipboard images to capture. <code>0</code> = no limit.",
+      "clear_history_label": "Clear history",
+      "clear_history_desc": "Delete all entries not saved in a collection. Entries in any collection (including Favorites) are kept.",
+      "clear_history_button": "Clear now",
+      "clear_history_confirm": "Delete all history entries not in any collection? This cannot be undone.",
+      "clear_history_running": "Clearing…",
+      "clear_history_result": "{{count}} entries deleted"
     },
     "reclassify": {
       "button": "Re-classify entries",

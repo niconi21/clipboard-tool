@@ -220,6 +220,7 @@ pub fn run() {
             commands::reclassify_entries,
             commands::export_config,
             commands::import_config,
+            commands::clear_history,
         ])
         .on_window_event(|window, event| {
             let app = window.app_handle();
