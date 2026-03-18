@@ -111,7 +111,7 @@ function App() {
   const [subCountKey, setSubCountKey] = useState(0);
   const bumpSubCounts = useCallback(() => setSubCountKey((k) => k + 1), []);
 
-  const { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType } = useClipboard(
+  const { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType, removeEntryFromView } = useClipboard(
     search, filters, pageSize,
     activeTab === "favorites",
     activeCollectionId,
@@ -281,6 +281,7 @@ function App() {
       collectionId: activeCollectionId,
       subcollectionId,
     }).catch(console.error);
+    if (activeSubcollection !== null) removeEntryFromView(entryId);
     bumpSubCounts();
   }
 
@@ -666,7 +667,10 @@ function App() {
               loadCounts();
               patchEntryCollections(entryId, collectionIds);
             }}
-                onSubcollectionChanged={bumpSubCounts}
+                onSubcollectionChanged={(entryId) => {
+              bumpSubCounts();
+              if (activeSubcollection !== null) removeEntryFromView(entryId);
+            }}
                 onAliasChanged={(entryId, alias) => patchEntryAlias(entryId, alias)}
                 onContentTypeChanged={(entryId, contentType) => {
               patchEntryContentType(entryId, contentType);

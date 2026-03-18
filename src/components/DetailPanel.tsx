@@ -14,7 +14,7 @@ interface Props {
   colorFor: (name: string) => string;
   onClose: () => void;
   onCollectionChanged?: (entryId: number, collectionIds: number[]) => void;
-  onSubcollectionChanged?: () => void;
+  onSubcollectionChanged?: (entryId: number) => void;
   onAliasChanged?: (entryId: number, alias: string | null) => void;
   onContentTypeChanged?: (entryId: number, contentType: string) => void;
 }
