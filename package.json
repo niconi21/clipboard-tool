@@ -44,7 +44,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "@vitest/coverage-v8": "^2.0",
-    "framer-motion": "^12.37.0",
+    "framer-motion": "^12.38.0",
     "jsdom": "^29.0.0",
     "tailwindcss": "^4.2.1",
     "typescript": "~5.8.3",
