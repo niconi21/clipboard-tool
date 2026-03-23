@@ -47,7 +47,7 @@
     "framer-motion": "^12.37.0",
     "jsdom": "^29.0.0",
     "tailwindcss": "^4.2.1",
-    "typescript": "~5.8.3",
+    "typescript": "~6.0.2",
     "vite": "^7.0.4",
     "vitest": "^2.0"
   }
