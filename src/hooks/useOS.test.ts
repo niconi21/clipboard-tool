@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 describe("useOS / currentOS", () => {
   // We must re-import the module with a fresh navigator after mocking,

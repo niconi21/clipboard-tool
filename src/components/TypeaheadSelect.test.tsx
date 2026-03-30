@@ -186,7 +186,7 @@ describe("TypeaheadSelect", () => {
   });
 
   it("shows checkmark on currently selected option", async () => {
-    const { container } = render(
+    render(
       <TypeaheadSelect
         value="url"
         onChange={vi.fn()}
