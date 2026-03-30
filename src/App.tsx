@@ -638,15 +638,13 @@ function App() {
           </button>
         </div>
       )}
-      <div data-tour="search-bar" className="contents">
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          filters={filters}
-          onFiltersChange={setFilters}
-          contentTypes={contentTypes}
-        />
-      </div>
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        filters={filters}
+        onFiltersChange={setFilters}
+        contentTypes={contentTypes}
+      />
 
       {/* Tab bar */}
       <div data-tour="tabs" className="flex items-center gap-1 px-3 pt-2 pb-1 shrink-0 border-b border-stroke overflow-x-auto">
