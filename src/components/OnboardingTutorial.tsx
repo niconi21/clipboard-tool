@@ -73,24 +73,33 @@ export function OnboardingTutorial({ onComplete, onSkip, onOpenSettings, onClose
     else setStep((s) => s + 1);
   }
 
-  // Compute tooltip position relative to spotlight rect
+  // Compute tooltip position. For tall elements (>150px) we use only the top
+  // portion as reference so the tooltip doesn't end up in the middle of the screen.
   function tooltipStyle(): React.CSSProperties {
-    if (!rect || !tooltipRef.current) return { top: "50%", left: "50%", transform: "translate(-50%,-50%)" };
-    const TOOLTIP_H = 120;
+    if (!rect) return { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 280, zIndex: 52 };
+    const TOOLTIP_H = 130;
     const TOOLTIP_W = 280;
     const viewH = window.innerHeight;
     const viewW = window.innerWidth;
-    const spaceBelow = viewH - (rect.top + rect.height + PAD);
+
+    // Use the visible top of the element (capped at 140px) for space calculations
+    const effectiveHeight = Math.min(rect.height, 140);
+    const effectiveBottom = rect.top + effectiveHeight + PAD;
+    const spaceBelow = viewH - effectiveBottom;
     const spaceAbove = rect.top - PAD;
 
     let top: number;
     if (spaceBelow >= TOOLTIP_H + 16) {
-      top = rect.top + rect.height + PAD + 8;
+      top = effectiveBottom + 8;
     } else if (spaceAbove >= TOOLTIP_H + 16) {
       top = rect.top - PAD - TOOLTIP_H - 8;
     } else {
-      top = rect.top + rect.height / 2 - TOOLTIP_H / 2;
+      // Not enough space above or below — anchor to bottom of viewport
+      top = viewH - TOOLTIP_H - 16;
     }
+
+    // Always clamp within viewport
+    top = Math.max(8, Math.min(viewH - TOOLTIP_H - 8, top));
 
     let left = rect.left + rect.width / 2 - TOOLTIP_W / 2;
     left = Math.max(12, Math.min(viewW - TOOLTIP_W - 12, left));
@@ -135,7 +144,7 @@ export function OnboardingTutorial({ onComplete, onSkip, onOpenSettings, onClose
         onClick={advance}
       />
 
-      {/* Spotlight cutout */}
+      {/* Spotlight cutout — height capped at 160px for large sections */}
       {rect && (
         <div
           style={{
@@ -143,7 +152,7 @@ export function OnboardingTutorial({ onComplete, onSkip, onOpenSettings, onClose
             top: rect.top - PAD,
             left: rect.left - PAD,
             width: rect.width + PAD * 2,
-            height: rect.height + PAD * 2,
+            height: Math.min(rect.height, 160) + PAD * 2,
             borderRadius: 10,
             boxShadow: "0 0 0 9999px rgba(0,0,0,0.72)",
             zIndex: 51,
