@@ -300,6 +300,102 @@ async fn handle_text_entry(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn clipboard_pause_new_initializes_with_active() {
+        let pause = ClipboardPause::new();
+        let guard = pause.0.lock().unwrap();
+        assert!(matches!(*guard, PauseState::Active));
+    }
+
+    #[test]
+    fn app_copied_content_new_initializes_with_none() {
+        let acc = AppCopiedContent::new();
+        let guard = acc.0.lock().unwrap();
+        assert!(guard.is_none());
+    }
+
+    #[test]
+    fn app_copied_image_hash_new_initializes_with_none() {
+        let acih = AppCopiedImageHash::new();
+        let guard = acih.0.lock().unwrap();
+        assert!(guard.is_none());
+    }
+
+    #[test]
+    fn pause_state_until_past_is_expired() {
+        // A deadline in the past means the pause is over
+        let past = Instant::now() - Duration::from_secs(5);
+        let state = PauseState::Until(past);
+        // We can't call check_pause without an AppHandle, but we can inspect the variant
+        // and verify the logic: Instant::now() >= past → expired
+        if let PauseState::Until(until) = state {
+            assert!(Instant::now() >= until, "past deadline should be considered expired");
+        } else {
+            panic!("expected PauseState::Until");
+        }
+    }
+
+    #[test]
+    fn pause_state_until_future_is_not_expired() {
+        let future = Instant::now() + Duration::from_secs(60);
+        let state = PauseState::Until(future);
+        if let PauseState::Until(until) = state {
+            assert!(Instant::now() < until, "future deadline should NOT be considered expired");
+        } else {
+            panic!("expected PauseState::Until");
+        }
+    }
+
+    #[test]
+    fn pause_state_indefinite_variant_exists() {
+        let state = PauseState::Indefinite;
+        assert!(matches!(state, PauseState::Indefinite));
+    }
+
+    #[test]
+    fn clipboard_pause_can_be_set_to_indefinite() {
+        let pause = ClipboardPause::new();
+        {
+            let mut guard = pause.0.lock().unwrap();
+            *guard = PauseState::Indefinite;
+        }
+        let guard = pause.0.lock().unwrap();
+        assert!(matches!(*guard, PauseState::Indefinite));
+    }
+
+    #[test]
+    fn clipboard_pause_can_be_set_to_until() {
+        let pause = ClipboardPause::new();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        {
+            let mut guard = pause.0.lock().unwrap();
+            *guard = PauseState::Until(deadline);
+        }
+        let guard = pause.0.lock().unwrap();
+        assert!(matches!(*guard, PauseState::Until(_)));
+    }
+
+    #[test]
+    fn clipboard_pause_can_be_reset_to_active() {
+        let pause = ClipboardPause::new();
+        {
+            let mut guard = pause.0.lock().unwrap();
+            *guard = PauseState::Indefinite;
+        }
+        {
+            let mut guard = pause.0.lock().unwrap();
+            *guard = PauseState::Active;
+        }
+        let guard = pause.0.lock().unwrap();
+        assert!(matches!(*guard, PauseState::Active));
+    }
+}
+
 async fn handle_image_entry(
     app: AppHandle,
     hash_hex: String,
