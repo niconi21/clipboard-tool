@@ -302,5 +302,22 @@
     "import_button": "Import",
     "export_success": "Configuration exported",
     "import_result": "Imported: {{total}} items"
+  },
+  "onboarding": {
+    "s0_title": "Welcome to Clipboard Tool",
+    "s0_desc": "Your clipboard history, organized and searchable. Let us show you around.",
+    "s1_title": "Your Clipboard History",
+    "s1_desc": "Everything you copy appears here automatically. Click any entry to see the full content.",
+    "s2_title": "Search Your History",
+    "s2_desc": "Find any entry instantly by typing — searches content, app names, and more.",
+    "s3_title": "Collections & Favorites",
+    "s3_desc": "Organize entries into collections. Drag and drop entries onto tabs to add them.",
+    "s4_title": "Settings",
+    "s4_desc": "Configure themes, content types, categories, and more from the settings panel.",
+    "skip": "Skip tutorial",
+    "start": "Start tour",
+    "next": "Next",
+    "finish": "Get started",
+    "restart": "Restart tutorial"
   }
 }

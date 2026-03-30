@@ -765,6 +765,7 @@ async fn seed_settings(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("pause_duration_minutes", "30"),
         ("font_family", "system"),
         ("font_size", "16"),
+        ("onboarding_completed", "0"),
     ];
 
     for (key, value) in defaults {

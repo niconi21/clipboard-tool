@@ -12,6 +12,7 @@ import { EntryList } from "./components/EntryList";
 import { DetailPanel } from "./components/DetailPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SubcollectionPanel } from "./components/SubcollectionPanel";
+import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { WindowControls } from "./components/WindowControls";
 import { useClipboard, EMPTY_FILTERS } from "./hooks/useClipboard";
 import type { ClipboardFilters } from "./hooks/useClipboard";
@@ -40,6 +41,7 @@ function App() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // pauseSecsRemaining: null = active, -1 = indefinite, >0 = seconds remaining
   const [pauseSecsRemaining, setPauseSecsRemaining] = useState<number | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [draggingEntry, setDraggingEntry] = useState<ClipboardEntry | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<number | null>(null);
@@ -114,6 +116,12 @@ function App() {
   }, []);
 
   useEffect(() => { runBootstrap(); }, [runBootstrap]);
+
+  useEffect(() => {
+    if (!boot) return;
+    const completed = boot.settings.find((s) => s.key === "onboarding_completed")?.value ?? "0";
+    if (completed === "0") setShowOnboarding(true);
+  }, [boot]);
 
   // ── Hooks — only fetch if not seeded from bootstrap ─────────────────────────
   const { contentTypes, colorFor, labelFor, refresh: refreshContentTypes } = useContentTypes(initialContentTypes);
@@ -420,6 +428,17 @@ function App() {
     runBootstrap();
   }, [runBootstrap]);
 
+  // ── Onboarding ─────────────────────────────────────────────────────────────
+  const handleCompleteOnboarding = useCallback(async () => {
+    setShowOnboarding(false);
+    await invoke("update_setting", { key: "onboarding_completed", value: "1" }).catch(console.error);
+  }, []);
+
+  const handleSkipOnboarding = useCallback(async () => {
+    setShowOnboarding(false);
+    await invoke("update_setting", { key: "onboarding_completed", value: "1" }).catch(console.error);
+  }, []);
+
   // ── Reclassify ─────────────────────────────────────────────────────────────
   async function handleReclassify(includeOverrides: boolean): Promise<number> {
     const count = await invoke<number>("reclassify_entries", { includeOverrides });
@@ -516,6 +535,7 @@ function App() {
             {t(entries.length === 1 ? "collections_mgr.entries_count_one" : "collections_mgr.entries_count_other", { count: entries.length })}
           </span>
           <button
+            data-tour="settings-btn"
             className="pointer-events-auto p-1 rounded text-content-3 hover:text-content hover:bg-surface-raised transition-colors"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setSettingsOpen((v) => !v)}
@@ -590,6 +610,7 @@ function App() {
             pauseSecsRemaining={pauseSecsRemaining}
             onPause={(minutes) => invoke("pause_clipboard", { minutes: minutes ?? undefined }).then(() => {}).catch(console.error)}
             onResume={() => invoke("resume_clipboard").then(() => {}).catch(console.error)}
+            onRestartTutorial={() => { setSettingsOpen(false); setShowOnboarding(true); }}
           />
         </div>
       ) : (
@@ -617,16 +638,18 @@ function App() {
           </button>
         </div>
       )}
-      <SearchBar
-        value={search}
-        onChange={setSearch}
-        filters={filters}
-        onFiltersChange={setFilters}
-        contentTypes={contentTypes}
-      />
+      <div data-tour="search-bar" className="contents">
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          filters={filters}
+          onFiltersChange={setFilters}
+          contentTypes={contentTypes}
+        />
+      </div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 px-3 pt-2 pb-1 shrink-0 border-b border-stroke overflow-x-auto">
+      <div data-tour="tabs" className="flex items-center gap-1 px-3 pt-2 pb-1 shrink-0 border-b border-stroke overflow-x-auto">
         <TabButton active={activeTab === "all"} onClick={() => handleTabChange("all")}>
           {t("tabs.all")}
           <span className="text-[10px] opacity-60">{counts.all}</span>
@@ -692,7 +715,7 @@ function App() {
             currentSubcollectionId={activeSubcollection}
           />
         )}
-        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+        <div data-tour="entry-list" className="flex flex-col flex-1 overflow-hidden min-w-0">
           <EntryList
             entries={entries}
             collections={collections}
@@ -757,6 +780,12 @@ function App() {
         <span className="text-[11px] text-content-3">clipboard-tool {appVersion ? `v${appVersion}` : "…"}</span>
       </div>
       </>
+      )}
+      {showOnboarding && (
+        <OnboardingTutorial
+          onComplete={handleCompleteOnboarding}
+          onSkip={handleSkipOnboarding}
+        />
       )}
     </div>
   );

@@ -302,5 +302,22 @@
     "import_button": "Importar",
     "export_success": "Configuración exportada",
     "import_result": "Importado: {{total}} elementos"
+  },
+  "onboarding": {
+    "s0_title": "Bienvenido a Clipboard Tool",
+    "s0_desc": "Tu historial del portapapeles, organizado y con búsqueda. Te mostramos cómo funciona.",
+    "s1_title": "Tu historial del portapapeles",
+    "s1_desc": "Todo lo que copias aparece aquí automáticamente. Haz clic en cualquier entrada para ver el contenido completo.",
+    "s2_title": "Busca en tu historial",
+    "s2_desc": "Encuentra cualquier entrada al instante escribiendo — busca contenido, nombres de apps y más.",
+    "s3_title": "Colecciones y favoritos",
+    "s3_desc": "Organiza entradas en colecciones. Arrastra y suelta entradas en las pestañas para agregarlas.",
+    "s4_title": "Configuración",
+    "s4_desc": "Configura temas, tipos de contenido, categorías y más desde el panel de configuración.",
+    "skip": "Saltar tutorial",
+    "start": "Iniciar tour",
+    "next": "Siguiente",
+    "finish": "Comenzar",
+    "restart": "Reiniciar tutorial"
   }
 }

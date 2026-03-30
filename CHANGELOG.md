@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat(#63): interactive onboarding tutorial — spotlight-style step-by-step walkthrough triggered on first launch; re-accessible from Settings > About; skip option; i18n support
 - feat(#60): live theme editor — color picker changes apply instantly via CSS variables; edit mode auto-saves to DB with 800ms debounce; cancel reverts to active theme; Reset button restores pre-edit colors
 - feat(#62): built-in Light theme — clean light color palette selectable from Settings > Appearance
 - feat(#55): hide "Sin clasificar" subcollection when it has 0 entries; auto-navigate to "All" if it was active when count drops to 0

@@ -82,6 +82,7 @@ interface Props {
   pauseSecsRemaining: number | null;
   onPause: (minutes: number | null) => Promise<void>;
   onResume: () => Promise<void>;
+  onRestartTutorial?: () => void;
 }
 
 type Tab = "appearance" | "content-types" | "categories" | "collections" | "behavior" | "about";
@@ -132,6 +133,7 @@ export function SettingsPanel({
   pauseSecsRemaining,
   onPause,
   onResume,
+  onRestartTutorial,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
@@ -887,7 +889,7 @@ export function SettingsPanel({
         )}
 
         {/* ── About ──────────────────────────────────────────────────── */}
-        {activeTab === "about" && <AboutTab />}
+        {activeTab === "about" && <AboutTab onRestartTutorial={onRestartTutorial} />}
       </div>
     </div>
   );
@@ -926,7 +928,7 @@ const BACKEND_DEPS: { name: string; version: string; licenseKey: string; url: st
   { name: "tauri-plugin-single-instance",version: "2",     licenseKey: "mit_apache",    url: "https://tauri.app" },
 ];
 
-function AboutTab() {
+function AboutTab({ onRestartTutorial }: { onRestartTutorial?: () => void }) {
   const { t } = useTranslation();
   const [version, setVersion] = useState("");
   const [dataDir, setDataDir] = useState("");
@@ -1011,6 +1013,20 @@ function AboutTab() {
 
       {/* Backend deps */}
       <DepSection title={t("about.backend_title")} deps={BACKEND_DEPS} />
+
+      {onRestartTutorial && (
+        <div className="pt-2 border-t border-stroke">
+          <button
+            onClick={onRestartTutorial}
+            className="flex items-center gap-1.5 text-xs text-content-2 hover:text-content transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {t("onboarding.restart")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
