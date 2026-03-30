@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- feat(#70): drop macOS support — native macOS app maintained at https://github.com/niconi21/clipboard-tool-macos
+
 ## [1.3.1] - 2026-03-29
 
 ### Added
