@@ -30,6 +30,3 @@ coverage/
 # Tauri
 src-tauri/target/
 src-tauri/gen/schemas
-
-# Claude
-.claude/
