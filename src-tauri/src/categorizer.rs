@@ -943,4 +943,111 @@ mod tests {
         let ids = match_collections(&rules, "https://example.com", "url", None, None);
         assert_eq!(ids, vec![5]);
     }
+
+    // ── max_bytes = 0 means unlimited ─────────────────────────────────────────
+
+    #[test]
+    fn match_content_type_max_bytes_zero_means_unlimited() {
+        let groups = compile_content_rules(seeded_content_rules());
+        // Large URL that would be truncated if max_bytes were small
+        let text = format!("https://example.com/{}", "a".repeat(10000));
+        // With max_bytes=0 the full string is analyzed — URL pattern should still match
+        let result = match_content_type(&groups, &text, 0);
+        assert_eq!(result, "url");
+    }
+
+    // ── phone digit range boundaries ──────────────────────────────────────────
+
+    #[test]
+    fn match_content_type_phone_exactly_7_digits() {
+        let groups = compile_content_rules(seeded_content_rules());
+        let result = match_content_type(&groups, "555-1234", 8192); // 7 digits
+        assert_eq!(result, "phone");
+    }
+
+    #[test]
+    fn match_content_type_phone_exactly_15_digits() {
+        let groups = compile_content_rules(seeded_content_rules());
+        // 15-digit number (international max)
+        let result = match_content_type(&groups, "+123456789012345", 8192);
+        assert_eq!(result, "phone");
+    }
+
+    #[test]
+    fn match_content_type_phone_rejects_too_many_digits() {
+        let groups = compile_content_rules(seeded_content_rules());
+        // 16 digits exceeds the max
+        let result = match_content_type(&groups, "1234567890123456", 8192);
+        assert_ne!(result, "phone");
+    }
+
+    // ── match_category edge cases ─────────────────────────────────────────────
+
+    #[test]
+    fn match_category_returns_none_when_category_id_is_none() {
+        // Rule matches but has no category_id — should return None
+        let rules = compile_context_rules(vec![make_context_rule(1, None, Some("browser"), None, 50)]);
+        let result = match_category(&rules, Some("browser"), None);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn match_category_no_match_returns_none() {
+        let rules = compile_context_rules(vec![make_context_rule(1, Some(5), Some("vscode"), None, 10)]);
+        // "firefox" doesn't match "vscode" pattern
+        let result = match_category(&rules, Some("firefox"), None);
+        assert_eq!(result, None);
+    }
+
+    // ── match_collections: source_app and window_title ────────────────────────
+
+    #[test]
+    fn match_collections_by_source_app() {
+        let rules = compile_collection_rules(vec![CollectionRuleRaw {
+            collection_id: 42,
+            content_type: None,
+            source_app: Some(r"(?i)slack".to_string()),
+            window_title: None,
+            content_pattern: None,
+        }]);
+        let ids = match_collections(&rules, "any content", "text", Some("Slack"), None);
+        assert_eq!(ids, vec![42]);
+    }
+
+    #[test]
+    fn match_collections_by_window_title() {
+        let rules = compile_collection_rules(vec![CollectionRuleRaw {
+            collection_id: 77,
+            content_type: None,
+            source_app: None,
+            window_title: Some(r"GitHub".to_string()),
+            content_pattern: None,
+        }]);
+        let ids = match_collections(&rules, "any content", "text", None, Some("GitHub - niconi21/clipboard-tool"));
+        assert_eq!(ids, vec![77]);
+    }
+
+    #[test]
+    fn match_collections_returns_multiple_matching_collection_ids() {
+        let rules = compile_collection_rules(vec![
+            CollectionRuleRaw {
+                collection_id: 1,
+                content_type: Some("url".to_string()),
+                source_app: None,
+                window_title: None,
+                content_pattern: None,
+            },
+            CollectionRuleRaw {
+                collection_id: 2,
+                content_type: None,
+                source_app: None,
+                window_title: None,
+                content_pattern: Some(r"github\.com".to_string()),
+            },
+        ]);
+        let ids = match_collections(&rules, "https://github.com/foo", "url", None, None);
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&1));
+        assert!(ids.contains(&2));
+    }
 }
