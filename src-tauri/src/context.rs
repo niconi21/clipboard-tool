@@ -11,9 +11,6 @@ pub fn get_active_context() -> AppContext {
     #[cfg(target_os = "windows")]
     return get_context_windows();
 
-    #[cfg(target_os = "macos")]
-    return get_context_macos();
-
     #[allow(unreachable_code)]
     AppContext::default()
 }
@@ -66,8 +63,3 @@ fn get_context_windows() -> AppContext {
     AppContext::default()
 }
 
-#[cfg(target_os = "macos")]
-fn get_context_macos() -> AppContext {
-    // TODO: implement via NSWorkspace (objc crate)
-    AppContext::default()
-}

@@ -19,7 +19,6 @@ import type { ClipboardFilters } from "./hooks/useClipboard";
 import { useContentTypes } from "./hooks/useContentTypes";
 import { useTheme } from "./hooks/useTheme";
 import { useCollections } from "./hooks/useCollections";
-import { currentOS } from "./hooks/useOS";
 import type { BootstrapData, Category, ClipboardEntry, CollectionRule, ContentRule, ContextRule, Setting, Theme } from "./types";
 import type { ThemeColors } from "./components/SettingsPanel";
 
@@ -517,19 +516,11 @@ function App() {
         }}
         onDoubleClick={() => getCurrentWindow().toggleMaximize().catch(console.error)}
       >
-        {currentOS === "macos" && (
-          <div className="pl-3 pt-3 pb-2 pointer-events-auto shrink-0">
-            <WindowControls />
-          </div>
-        )}
-
         <div className="flex items-center gap-2 flex-1 px-3 pt-3 pb-2 pointer-events-none min-w-0">
-          {currentOS !== "macos" && (
-            <svg className="w-3 h-3 text-content-3 shrink-0" viewBox="0 0 12 12" fill="currentColor">
-              <circle cx="2" cy="3" r="1" /><circle cx="6" cy="3" r="1" /><circle cx="10" cy="3" r="1" />
-              <circle cx="2" cy="7" r="1" /><circle cx="6" cy="7" r="1" /><circle cx="10" cy="7" r="1" />
-            </svg>
-          )}
+          <svg className="w-3 h-3 text-content-3 shrink-0" viewBox="0 0 12 12" fill="currentColor">
+            <circle cx="2" cy="3" r="1" /><circle cx="6" cy="3" r="1" /><circle cx="10" cy="3" r="1" />
+            <circle cx="2" cy="7" r="1" /><circle cx="6" cy="7" r="1" /><circle cx="10" cy="7" r="1" />
+          </svg>
           <span className="text-xs font-medium text-content-2 tracking-wide">CLIPBOARD</span>
           {import.meta.env.DEV && (
             <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
@@ -553,11 +544,9 @@ function App() {
           </button>
         </div>
 
-        {currentOS !== "macos" && (
-          <div className="pointer-events-auto shrink-0">
-            <WindowControls />
-          </div>
-        )}
+        <div className="pointer-events-auto shrink-0">
+          <WindowControls />
+        </div>
       </div>
 
       {settingsOpen ? (

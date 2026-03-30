@@ -116,8 +116,8 @@ clipboard-tool/
 |----------|--------|
 | Linux (X11) | Primary development target — fully working |
 | Linux (Wayland) | Global hotkey and clipboard polling may have limitations |
-| macOS | UI adapted (traffic-light window controls) — untested beyond UI |
 | Windows | UI adapted (Fluent window controls) — untested |
+| macOS | Not supported — see [clipboard-tool-macos](https://github.com/niconi21/clipboard-tool-macos) for the native macOS app |
 
 ---
 

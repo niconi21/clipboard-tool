@@ -57,8 +57,6 @@ jobs:
         include:
           - platform: ubuntu-22.04
             args: '--bundles deb,rpm'
-          - platform: macos-latest
-            args: '--bundles dmg'
           - platform: windows-latest
             args: '--bundles msi,nsis'
 
@@ -78,10 +76,6 @@ jobs:
             patchelf \
             libxdo-dev \
             libssl-dev
-
-      - name: Install macOS dependencies
-        if: matrix.platform == 'macos-latest'
-        run: brew install create-dmg
 
       - name: Setup Node
         uses: actions/setup-node@v4

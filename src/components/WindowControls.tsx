@@ -39,9 +39,6 @@ export function WindowControls() {
     await invoke("hide_window");
   }
 
-  if (currentOS === "macos") {
-    return <MacOSControls onHide={hide} onMinimize={minimize} onMaximize={toggleMaximize} maximized={maximized} />;
-  }
   if (currentOS === "linux") {
     return <LinuxControls onHide={hide} onMinimize={minimize} onMaximize={toggleMaximize} maximized={maximized} />;
   }
@@ -55,52 +52,6 @@ interface ControlProps {
   onMinimize: () => void;
   onMaximize: () => void;
   maximized: boolean;
-}
-
-// ── macOS — traffic lights (left side) ───────────────────────────────────────
-
-function MacOSControls({ onHide, onMinimize, onMaximize }: ControlProps) {
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <div
-      className="flex items-center gap-1.5"
-      onMouseDown={nodrag}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <button onClick={onHide} onMouseDown={nodrag}
-        className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 flex items-center justify-center transition-colors"
-        title="Hide"
-      >
-        {hovered && (
-          <svg className="w-1.5 h-1.5 text-red-900" fill="none" viewBox="0 0 6 6" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" d="M1 1l4 4M5 1L1 5" />
-          </svg>
-        )}
-      </button>
-      <button onClick={onMinimize} onMouseDown={nodrag}
-        className="w-3 h-3 rounded-full bg-yellow-400 hover:bg-yellow-300 flex items-center justify-center transition-colors"
-        title="Minimize"
-      >
-        {hovered && (
-          <svg className="w-1.5 h-1.5 text-yellow-900" fill="none" viewBox="0 0 6 2" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" d="M0 1h6" />
-          </svg>
-        )}
-      </button>
-      <button onClick={onMaximize} onMouseDown={nodrag}
-        className="w-3 h-3 rounded-full bg-green-500 hover:bg-green-400 flex items-center justify-center transition-colors"
-        title="Maximize"
-      >
-        {hovered && (
-          <svg className="w-1.5 h-1.5 text-green-900" fill="none" viewBox="0 0 6 6" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" d="M1 5V1h4M5 5H1" />
-          </svg>
-        )}
-      </button>
-    </div>
-  );
 }
 
 // ── Linux — circles on the right, neutral palette ────────────────────────────

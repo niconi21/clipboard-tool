@@ -219,9 +219,9 @@ All filter options are loaded from DB (distinct values). Each uses `TypeaheadSel
 ## Platform Notes
 
 - **Linux (primary dev)**: X11. Global shortcut and clipboard polling work. Tray right-click for menu.
-- **macOS**: Window controls (traffic lights) on the left. Untested beyond UI.
 - **Windows**: Window controls (flat Fluent style) on the right. Fix applied for duplicate tray icon (#5) — pending validation on Windows.
 - **Wayland**: May have limitations with global hotkeys and clipboard polling.
+- **macOS**: Not supported in this repo — native app at https://github.com/niconi21/clipboard-tool-macos
 
 ## Dev environment isolation
 
