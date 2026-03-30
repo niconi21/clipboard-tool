@@ -9,17 +9,24 @@ No cloud sync, no telemetry. Everything stays on your machine in a local SQLite 
 ## Features
 
 - **Clipboard history** — automatically captures everything you copy, searchable in real time
-- **Content type detection** — regex-based rules classify entries as URL, email, phone number, color, code snippet or plain text
+- **Content type detection** — regex-based rules classify entries as URL, email, phone number, color, code snippet, JSON, SQL, shell, markdown or plain text
 - **Syntax highlighting** — code entries are highlighted via highlight.js with auto language detection
 - **Categories** — assign entries to categories based on source app and/or window title patterns
 - **Collections** — organize entries into named groups; entries in a collection are never auto-deleted
+- **Subcollections** — each collection shows an entry count; "Uncategorized" subcollection hides automatically when empty
 - **Favorites** — built-in collection, entries are never pruned
+- **Drag & drop** — drag entries onto collection tabs or subcollection rows to assign or move them instantly
 - **Filters** — filter history by content type, source app, category or window title
-- **Themes** — multiple built-in color palettes, switchable at runtime
+- **Themes** — multiple built-in color palettes (including a Light theme), switchable at runtime
+- **Theme editor** — customize any theme's colors with a live color picker; changes apply instantly and auto-save with debounce
+- **Font configuration** — choose font family and size from Settings > Appearance
 - **Internationalization** — UI available in English and Spanish (Mexico); more languages can be added by dropping a locale file
 - **Global hotkey** — show/hide the window from anywhere on the desktop
 - **Auto-start** — optionally launch at system startup (minimized)
-- **Behavior controls** — configurable page size, max history, retention days, dedup interval, and max bytes analyzed per entry
+- **Pause monitoring** — temporarily stop capturing clipboard entries (5/10/15 min or indefinitely) from the tray menu or Settings > Behavior; countdown banner shown in the UI with a Resume button
+- **Clear history** — bulk-delete all entries not assigned to any collection from Settings > Behavior
+- **Behavior controls** — configurable page size, max history, retention days, and max bytes analyzed per entry
+- **Onboarding tutorial** — interactive spotlight walkthrough on first launch; re-accessible from Settings > About
 
 ---
 
@@ -65,7 +72,7 @@ npm run tauri dev
 npm run tauri build
 ```
 
-The SQLite database is created automatically on first launch at the platform default data directory (`~/.local/share/clipboard-tool/clipboard.db` on Linux). Delete it to reset all data.
+The SQLite database is created automatically on first launch at the platform default data directory (`~/.local/share/com.clipboard-tool.app/clipboard.db` on Linux). Delete it to reset all data.
 
 ---
 
