@@ -762,6 +762,10 @@ async fn seed_settings(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("page_size", "50"),
         ("language", "en"),
         ("max_image_size_bytes", "36700160"),
+        ("pause_duration_minutes", "30"),
+        ("font_family", "system"),
+        ("font_size", "16"),
+        ("onboarding_completed", "0"),
     ];
 
     for (key, value) in defaults {
@@ -1244,6 +1248,18 @@ pub async fn cleanup_entries(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     }
 
     Ok(())
+}
+
+/// Delete all entries that are not in any collection (same exemption as auto-cleanup).
+/// Returns the number of rows deleted.
+pub async fn clear_history(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(
+        "DELETE FROM entries
+         WHERE id NOT IN (SELECT entry_id FROM entry_collections)",
+    )
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
 }
 
 /// Delete image files in `<app_data>/images/` that are no longer referenced by any entry.
@@ -1911,14 +1927,22 @@ async fn seed_themes(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         ("dusk",     "Dusk",     "#0e0b08", "#181410", "#221d17", "#2d2620", "#2e2720", "#4e4238", "#f2ede8", "#b09a82", "#6e5c48", "#d4832a", "#f0b870"),
         ("forest",   "Forest",   "#080d0a", "#101810", "#172018", "#1f2b20", "#1e2c1f", "#344d36", "#e4ede5", "#7fa882", "#4a6e4d", "#4caf7d", "#8dd8ad"),
         ("plum",     "Plum",     "#0b090e", "#141118", "#1d1924", "#272230", "#272130", "#42385a", "#eee9f5", "#a090c0", "#64587a", "#8b68e8", "#bda8f8"),
+        ("light",    "Light",    "#eef0f4", "#ffffff", "#f5f7fa", "#e8edf5", "#e2e8f0", "#94a3b8", "#0f172a", "#334155", "#475569", "#2563eb", "#ffffff"),
     ];
 
     for (slug, name, base, surface, surface_raised, surface_active, stroke, stroke_strong, content, content_2, content_3, accent, accent_text) in themes {
         sqlx::query(
-            "INSERT OR IGNORE INTO themes
+            "INSERT INTO themes
              (slug, name, base, surface, surface_raised, surface_active,
               stroke, stroke_strong, content, content_2, content_3, accent, accent_text)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
+             ON CONFLICT(slug) DO UPDATE SET
+               name=excluded.name, base=excluded.base, surface=excluded.surface,
+               surface_raised=excluded.surface_raised, surface_active=excluded.surface_active,
+               stroke=excluded.stroke, stroke_strong=excluded.stroke_strong,
+               content=excluded.content, content_2=excluded.content_2, content_3=excluded.content_3,
+               accent=excluded.accent, accent_text=excluded.accent_text
+             WHERE is_builtin = 1",
         )
         .bind(slug).bind(name).bind(base).bind(surface)
         .bind(surface_raised).bind(surface_active).bind(stroke).bind(stroke_strong)

@@ -147,5 +147,13 @@ export function useClipboard(search: string, filters: ClipboardFilters, pageSize
     );
   }, []);
 
-  return { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType };
+  const removeEntryFromView = useCallback((id: number) => {
+    setEntries((prev) => {
+      const updated = prev.filter((e) => e.id !== id);
+      offsetRef.current = updated.length;
+      return updated;
+    });
+  }, []);
+
+  return { entries, loading, loadingMore, hasMore, loadMore, reloadEntries: load, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType, removeEntryFromView };
 }

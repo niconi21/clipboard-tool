@@ -12,6 +12,7 @@ import { EntryList } from "./components/EntryList";
 import { DetailPanel } from "./components/DetailPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SubcollectionPanel } from "./components/SubcollectionPanel";
+import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { WindowControls } from "./components/WindowControls";
 import { useClipboard, EMPTY_FILTERS } from "./hooks/useClipboard";
 import type { ClipboardFilters } from "./hooks/useClipboard";
@@ -38,6 +39,10 @@ function App() {
   const [activeSubcollection, setActiveSubcollection] = useState<number | null>(null);
   const [counts, setCounts] = useState<{ all: number; favorites: number }>({ all: 0, favorites: 0 });
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // pauseSecsRemaining: null = active, -1 = indefinite, >0 = seconds remaining
+  const [pauseSecsRemaining, setPauseSecsRemaining] = useState<number | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [settingsTabOverride, setSettingsTabOverride] = useState<string | undefined>(undefined);
   const [isDragging, setIsDragging] = useState(false);
   const [draggingEntry, setDraggingEntry] = useState<ClipboardEntry | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<number | null>(null);
@@ -75,6 +80,21 @@ function App() {
     [boot],
   );
 
+  const FONT_FAMILIES: Record<string, string> = {
+    system: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    inter:  "'Inter', system-ui, sans-serif",
+    mono:   "ui-monospace, 'JetBrains Mono', 'Cascadia Code', monospace",
+    serif:  "Georgia, 'Times New Roman', serif",
+  };
+
+  function applyFontSettings(settings: { key: string; value: string }[]) {
+    const family = settings.find((s) => s.key === "font_family")?.value ?? "system";
+    const size   = settings.find((s) => s.key === "font_size")?.value   ?? "16";
+    const root = document.documentElement;
+    root.style.setProperty("--app-font-family", FONT_FAMILIES[family] ?? FONT_FAMILIES.system);
+    root.style.setProperty("--app-font-size", `${size}px`);
+  }
+
   const runBootstrap = useCallback(() => {
     invoke<BootstrapData>("bootstrap")
       .then((data) => {
@@ -87,6 +107,7 @@ function App() {
         const w = parseInt(data.settings.find((s) => s.key === "detail_panel_width")?.value ?? "", 10);
         if (!isNaN(w)) { setPanelWidth(w); panelWidthRef.current = w; }
 
+        applyFontSettings(data.settings);
         setThemes(data.themes);
         setLocalSettings(data.settings);
         settingsLoadedRef.current = false; // force reload of settings-panel data
@@ -96,6 +117,12 @@ function App() {
   }, []);
 
   useEffect(() => { runBootstrap(); }, [runBootstrap]);
+
+  useEffect(() => {
+    if (!boot) return;
+    const completed = boot.settings.find((s) => s.key === "onboarding_completed")?.value ?? "0";
+    if (completed === "0") setShowOnboarding(true);
+  }, [boot]);
 
   // ── Hooks — only fetch if not seeded from bootstrap ─────────────────────────
   const { contentTypes, colorFor, labelFor, refresh: refreshContentTypes } = useContentTypes(initialContentTypes);
@@ -111,7 +138,7 @@ function App() {
   const [subCountKey, setSubCountKey] = useState(0);
   const bumpSubCounts = useCallback(() => setSubCountKey((k) => k + 1), []);
 
-  const { entries, loading, loadingMore, hasMore, loadMore, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType } = useClipboard(
+  const { entries, loading, loadingMore, hasMore, loadMore, reloadEntries, removeEntry, toggleFavorite, patchEntryCollections, patchEntryAlias, patchEntryContentType, removeEntryFromView } = useClipboard(
     search, filters, pageSize,
     activeTab === "favorites",
     activeCollectionId,
@@ -194,6 +221,26 @@ function App() {
       .catch(console.error);
     return () => { cancelled = true; unlisten?.(); };
   }, [loadCounts, refreshCollectionCounts, bumpSubCounts]);
+
+  // ── Pause state — listen to events + countdown ──────────────────────────────
+  useEffect(() => {
+    invoke<number | null>("get_pause_state").then((v) => setPauseSecsRemaining(v ?? null)).catch(() => {});
+    let cancelPaused: (() => void) | null = null;
+    let cancelResumed: (() => void) | null = null;
+    listen<number>("clipboard-paused", (e) => setPauseSecsRemaining(e.payload))
+      .then((fn) => { cancelPaused = fn; }).catch(() => {});
+    listen("clipboard-resumed", () => setPauseSecsRemaining(null))
+      .then((fn) => { cancelResumed = fn; }).catch(() => {});
+    return () => { cancelPaused?.(); cancelResumed?.(); };
+  }, []);
+
+  // Countdown ticker — decrements every second while paused with a timer
+  useEffect(() => {
+    if (pauseSecsRemaining === null || pauseSecsRemaining === -1) return;
+    if (pauseSecsRemaining <= 0) { setPauseSecsRemaining(null); return; }
+    const id = setTimeout(() => setPauseSecsRemaining((s) => (s !== null && s > 0 ? s - 1 : null)), 1000);
+    return () => clearTimeout(id);
+  }, [pauseSecsRemaining]);
 
   // ── Settings panel — lazy load, cached after first open ──────────────────────
   const [categories, setCategories] = useState<Category[]>([]);
@@ -281,17 +328,20 @@ function App() {
       collectionId: activeCollectionId,
       subcollectionId,
     }).catch(console.error);
+    if (activeSubcollection !== null) removeEntryFromView(entryId);
     bumpSubCounts();
   }
 
   function handleSettingChange(key: string, value: string) {
     invoke("update_setting", { key, value }).catch(console.error);
     // Update local settings cache used by SettingsPanel
-    setLocalSettings((prev) =>
-      prev.some((s) => s.key === key)
+    setLocalSettings((prev) => {
+      const next = prev.some((s) => s.key === key)
         ? prev.map((s) => (s.key === key ? { ...s, value } : s))
-        : [...prev, { key, value, updated_at: "" }]
-    );
+        : [...prev, { key, value, updated_at: "" }];
+      if (key === "font_family" || key === "font_size") applyFontSettings(next);
+      return next;
+    });
     if (key === "language") i18n.changeLanguage(value);
   }
 
@@ -379,11 +429,34 @@ function App() {
     runBootstrap();
   }, [runBootstrap]);
 
+  // ── Onboarding ─────────────────────────────────────────────────────────────
+  const handleCompleteOnboarding = useCallback(async () => {
+    setShowOnboarding(false);
+    setSettingsOpen(false);
+    setSettingsTabOverride(undefined);
+    await invoke("update_setting", { key: "onboarding_completed", value: "1" }).catch(console.error);
+  }, []);
+
+  const handleSkipOnboarding = useCallback(async () => {
+    setShowOnboarding(false);
+    setSettingsOpen(false);
+    setSettingsTabOverride(undefined);
+    await invoke("update_setting", { key: "onboarding_completed", value: "1" }).catch(console.error);
+  }, []);
+
   // ── Reclassify ─────────────────────────────────────────────────────────────
   async function handleReclassify(includeOverrides: boolean): Promise<number> {
     const count = await invoke<number>("reclassify_entries", { includeOverrides });
     loadCounts();
     refreshCollectionCounts();
+    return count;
+  }
+
+  // ── Clear history ───────────────────────────────────────────────────────────
+  async function handleClearHistory(): Promise<number> {
+    const count = await invoke<number>("clear_history");
+    await reloadEntries();
+    loadCounts();
     return count;
   }
 
@@ -467,6 +540,7 @@ function App() {
             {t(entries.length === 1 ? "collections_mgr.entries_count_one" : "collections_mgr.entries_count_other", { count: entries.length })}
           </span>
           <button
+            data-tour="settings-btn"
             className="pointer-events-auto p-1 rounded text-content-3 hover:text-content hover:bg-surface-raised transition-colors"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setSettingsOpen((v) => !v)}
@@ -536,7 +610,13 @@ function App() {
             onUpdateTheme={handleUpdateTheme}
             onDeleteTheme={handleDeleteTheme}
             onReclassify={handleReclassify}
+            onClearHistory={handleClearHistory}
             onConfigImported={handleConfigImported}
+            pauseSecsRemaining={pauseSecsRemaining}
+            onPause={(minutes) => invoke("pause_clipboard", { minutes: minutes ?? undefined }).then(() => {}).catch(console.error)}
+            onResume={() => invoke("resume_clipboard").then(() => {}).catch(console.error)}
+            onRestartTutorial={() => { setSettingsOpen(false); setShowOnboarding(true); }}
+            onboardingTab={settingsTabOverride}
           />
         </div>
       ) : (
@@ -545,6 +625,23 @@ function App() {
         <div className="mx-3 mt-2 px-3 py-2 rounded-md bg-danger/10 border border-danger/30 text-xs text-danger flex items-center justify-between gap-2">
           <span>{deleteError}</span>
           <button onClick={() => setDeleteError(null)} className="shrink-0 hover:opacity-70 transition-opacity">✕</button>
+        </div>
+      )}
+      {pauseSecsRemaining !== null && (
+        <div className="mx-3 mt-2 px-3 py-2 rounded-md bg-accent/10 border border-accent/30 text-xs text-accent flex items-center justify-between gap-2">
+          <span>
+            {pauseSecsRemaining === -1
+              ? t("pause.banner_indefinite")
+              : t("pause.banner_timed", { time: pauseSecsRemaining >= 60
+                  ? `${Math.ceil(pauseSecsRemaining / 60)}m`
+                  : `${pauseSecsRemaining}s` })}
+          </span>
+          <button
+            onClick={() => invoke("resume_clipboard").then(() => setPauseSecsRemaining(null)).catch(console.error)}
+            className="shrink-0 font-medium hover:opacity-70 transition-opacity"
+          >
+            {t("pause.resume")}
+          </button>
         </div>
       )}
       <SearchBar
@@ -556,7 +653,7 @@ function App() {
       />
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 px-3 pt-2 pb-1 shrink-0 border-b border-stroke overflow-x-auto">
+      <div data-tour="tabs" className="flex items-center gap-1 px-3 pt-2 pb-1 shrink-0 border-b border-stroke overflow-x-auto">
         <TabButton active={activeTab === "all"} onClick={() => handleTabChange("all")}>
           {t("tabs.all")}
           <span className="text-[10px] opacity-60">{counts.all}</span>
@@ -622,7 +719,7 @@ function App() {
             currentSubcollectionId={activeSubcollection}
           />
         )}
-        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+        <div data-tour="entry-list" className="flex flex-col flex-1 overflow-hidden min-w-0">
           <EntryList
             entries={entries}
             collections={collections}
@@ -666,6 +763,10 @@ function App() {
               loadCounts();
               patchEntryCollections(entryId, collectionIds);
             }}
+                onSubcollectionChanged={(entryId) => {
+              bumpSubCounts();
+              if (activeSubcollection !== null) removeEntryFromView(entryId);
+            }}
                 onAliasChanged={(entryId, alias) => patchEntryAlias(entryId, alias)}
                 onContentTypeChanged={(entryId, contentType) => {
               patchEntryContentType(entryId, contentType);
@@ -683,6 +784,15 @@ function App() {
         <span className="text-[11px] text-content-3">clipboard-tool {appVersion ? `v${appVersion}` : "…"}</span>
       </div>
       </>
+      )}
+      {showOnboarding && (
+        <OnboardingTutorial
+          onComplete={handleCompleteOnboarding}
+          onSkip={handleSkipOnboarding}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onCloseSettings={() => setSettingsOpen(false)}
+          onSetSettingsTab={setSettingsTabOverride}
+        />
       )}
     </div>
   );

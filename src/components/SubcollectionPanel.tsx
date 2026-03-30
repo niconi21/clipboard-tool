@@ -48,12 +48,23 @@ export function SubcollectionPanel({
       .catch(console.error);
   }
 
-  // Sort: default first, then by created_at
-  const sorted = [...subcollections].sort((a, b) => {
-    if (a.is_default && !b.is_default) return -1;
-    if (!a.is_default && b.is_default) return 1;
-    return a.created_at.localeCompare(b.created_at);
-  });
+  // Auto-navigate to "All" if the active subcollection is the default one and its count drops to 0
+  useEffect(() => {
+    if (activeSubcollection === null) return;
+    const activeSub = subcollections.find((s) => s.id === activeSubcollection);
+    if (activeSub?.is_default && (counts[activeSubcollection] ?? 0) === 0) {
+      onSelect(null);
+    }
+  }, [counts]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sort: default first, then by created_at; hide default when empty
+  const sorted = [...subcollections]
+    .filter((s) => !s.is_default || (counts[s.id] ?? 0) > 0)
+    .sort((a, b) => {
+      if (a.is_default && !b.is_default) return -1;
+      if (!a.is_default && b.is_default) return 1;
+      return a.created_at.localeCompare(b.created_at);
+    });
 
   const totalCount = Object.values(counts).reduce((sum, n) => sum + n, 0);
 
@@ -130,7 +141,7 @@ export function SubcollectionPanel({
                   e.preventDefault();
                   setDragOverId(null);
                   const id = parseInt(e.dataTransfer.getData("text/plain"), 10);
-                  if (!isNaN(id)) { onDropEntry(id, sub.id); refreshCounts(); }
+                  if (!isNaN(id)) onDropEntry(id, sub.id);
                 } : undefined}
                 className={`flex items-center justify-between gap-1 w-full px-2 py-1.5 rounded text-xs transition-all text-left ${
                   dragOverId === sub.id

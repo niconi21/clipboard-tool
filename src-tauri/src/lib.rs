@@ -11,22 +11,75 @@ use db::DbState;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
 use window_state::WindowSaveState;
 
 pub struct TrayMenuState {
     pub toggle: MenuItem<tauri::Wry>,
     pub quit: MenuItem<tauri::Wry>,
+    pub pause_5: MenuItem<tauri::Wry>,
+    pub pause_10: MenuItem<tauri::Wry>,
+    pub pause_15: MenuItem<tauri::Wry>,
+    pub pause_custom: MenuItem<tauri::Wry>,
+    pub pause_indefinite: MenuItem<tauri::Wry>,
+    pub resume: MenuItem<tauri::Wry>,
     pub open_label: std::sync::Mutex<String>,
     pub close_label: std::sync::Mutex<String>,
 }
 
-/// Returns (open, close, quit) labels for the tray menu in the given language.
-pub fn tray_labels(lang: &str) -> (&'static str, &'static str, &'static str) {
+impl TrayMenuState {
+    /// Enable/disable pause vs resume items based on current pause state.
+    pub fn set_paused(&self, paused: bool) {
+        let _ = self.pause_5.set_enabled(!paused);
+        let _ = self.pause_10.set_enabled(!paused);
+        let _ = self.pause_15.set_enabled(!paused);
+        let _ = self.pause_custom.set_enabled(!paused);
+        let _ = self.pause_indefinite.set_enabled(!paused);
+        let _ = self.resume.set_enabled(paused);
+    }
+
+    /// Update the "Pause N min" custom item label.
+    pub fn update_custom_label(&self, mins: u64) {
+        let label = format!("Pause {mins} min");
+        let _ = self.pause_custom.set_text(label);
+    }
+}
+
+pub struct TrayLabels {
+    pub open: &'static str,
+    pub close: &'static str,
+    pub quit: &'static str,
+    pub pause_5: &'static str,
+    pub pause_10: &'static str,
+    pub pause_15: &'static str,
+    pub pause_indefinite: &'static str,
+    pub resume: &'static str,
+}
+
+/// Returns localised tray menu labels for the given language.
+pub fn tray_labels(lang: &str) -> TrayLabels {
     match lang {
-        "es-MX" => ("Abrir", "Cerrar", "Salir"),
-        _ => ("Open", "Close", "Quit"),
+        "es-MX" => TrayLabels {
+            open: "Abrir",
+            close: "Cerrar",
+            quit: "Salir",
+            pause_5: "Pausar 5 min",
+            pause_10: "Pausar 10 min",
+            pause_15: "Pausar 15 min",
+            pause_indefinite: "Pausar indefinidamente",
+            resume: "Reanudar monitoreo",
+        },
+        _ => TrayLabels {
+            open: "Open",
+            close: "Close",
+            quit: "Quit",
+            pause_5: "Pause 5 min",
+            pause_10: "Pause 10 min",
+            pause_15: "Pause 15 min",
+            pause_indefinite: "Pause indefinitely",
+            resume: "Resume monitoring",
+        },
     }
 }
 
@@ -47,6 +100,7 @@ pub fn run() {
                 .args(["--minimized"])
                 .build(),
         )
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -79,6 +133,7 @@ pub fn run() {
             app.manage(app_log);
             app.manage(clipboard::AppCopiedContent::new());
             app.manage(clipboard::AppCopiedImageHash::new());
+            app.manage(clipboard::ClipboardPause::new());
 
             // Window save state: tracks pending position/size changes, flushes to DB
             let win_save = WindowSaveState::new();
@@ -86,6 +141,13 @@ pub fn run() {
             app.manage(win_save);
 
             clipboard::start_watcher(app.handle().clone());
+
+            // Startup notification
+            let startup_body = match lang.as_str() {
+                "es-MX" => "Monitoreo de portapapeles iniciado",
+                _ => "Clipboard monitoring started",
+            };
+            notify(app.handle(), startup_body);
 
             // Issue #2: periodic dedup task
             let dedup_handle = app.handle().clone();
@@ -113,17 +175,45 @@ pub fn run() {
                 }
             });
 
-            let (lbl_open, lbl_close, lbl_quit) = tray_labels(&lang);
+            let lbl = tray_labels(&lang);
 
-            let toggle_i = MenuItem::with_id(app, "toggle", lbl_open, true, None::<&str>)?;
-            let quit_i = MenuItem::with_id(app, "quit", lbl_quit, true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&toggle_i, &quit_i])?;
+            let custom_mins: u64 = tauri::async_runtime::block_on(
+                db::get_setting(&app.state::<DbState>().0, "pause_duration_minutes")
+            )
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30);
+
+            let toggle_i = MenuItem::with_id(app, "toggle", lbl.open, true, None::<&str>)?;
+            let sep1 = tauri::menu::PredefinedMenuItem::separator(app)?;
+            let pause_5_i = MenuItem::with_id(app, "pause_5", lbl.pause_5, true, None::<&str>)?;
+            let pause_10_i = MenuItem::with_id(app, "pause_10", lbl.pause_10, true, None::<&str>)?;
+            let pause_15_i = MenuItem::with_id(app, "pause_15", lbl.pause_15, true, None::<&str>)?;
+            let pause_custom_i = MenuItem::with_id(app, "pause_custom", format!("Pause {custom_mins} min"), true, None::<&str>)?;
+            let pause_indefinite_i = MenuItem::with_id(app, "pause_indefinite", lbl.pause_indefinite, true, None::<&str>)?;
+            let sep2 = tauri::menu::PredefinedMenuItem::separator(app)?;
+            let resume_i = MenuItem::with_id(app, "resume", lbl.resume, false, None::<&str>)?;
+            let sep3 = tauri::menu::PredefinedMenuItem::separator(app)?;
+            let quit_i = MenuItem::with_id(app, "quit", lbl.quit, true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[
+                &toggle_i, &sep1,
+                &pause_5_i, &pause_10_i, &pause_15_i, &pause_indefinite_i,
+                &sep2, &resume_i, &sep3,
+                &quit_i,
+            ])?;
 
             app.manage(TrayMenuState {
                 toggle: toggle_i,
                 quit: quit_i,
-                open_label: std::sync::Mutex::new(lbl_open.to_string()),
-                close_label: std::sync::Mutex::new(lbl_close.to_string()),
+                pause_5: pause_5_i,
+                pause_10: pause_10_i,
+                pause_15: pause_15_i,
+                pause_custom: pause_custom_i,
+                pause_indefinite: pause_indefinite_i,
+                resume: resume_i,
+                open_label: std::sync::Mutex::new(lbl.open.to_string()),
+                close_label: std::sync::Mutex::new(lbl.close.to_string()),
             });
 
             TrayIconBuilder::new()
@@ -134,6 +224,69 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "toggle" => toggle_window(app),
                     "quit" => app.exit(0),
+                    "pause_indefinite" => {
+                        let pause = app.state::<clipboard::ClipboardPause>();
+                        *pause.0.lock().unwrap() = clipboard::PauseState::Indefinite;
+                        let _ = app.emit("clipboard-paused", -1i64);
+                        if let Some(tray) = app.try_state::<TrayMenuState>() {
+                            tray.set_paused(true);
+                        }
+                        let lang = tauri::async_runtime::block_on(
+                            db::get_setting(&app.state::<DbState>().0, "language")
+                        ).ok().flatten().unwrap_or_else(|| "en".to_string());
+                        let body = match lang.as_str() {
+                            "es-MX" => "Monitoreo pausado indefinidamente",
+                            _ => "Clipboard monitoring paused indefinitely",
+                        };
+                        notify(app, body);
+                    }
+                    id @ ("pause_5" | "pause_10" | "pause_15" | "pause_custom") => {
+                        let mins: u64 = match id {
+                            "pause_5" => 5,
+                            "pause_10" => 10,
+                            "pause_15" => 15,
+                            _ => tauri::async_runtime::block_on(async {
+                                db::get_setting(&app.state::<DbState>().0, "pause_duration_minutes")
+                                    .await
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|v| v.parse().ok())
+                                    .unwrap_or(30)
+                            }),
+                        };
+                        let until = std::time::Instant::now()
+                            + std::time::Duration::from_secs(mins * 60);
+                        let pause = app.state::<clipboard::ClipboardPause>();
+                        *pause.0.lock().unwrap() = clipboard::PauseState::Until(until);
+                        let _ = app.emit("clipboard-paused", mins as i64 * 60);
+                        if let Some(tray) = app.try_state::<TrayMenuState>() {
+                            tray.set_paused(true);
+                        }
+                        let lang = tauri::async_runtime::block_on(
+                            db::get_setting(&app.state::<DbState>().0, "language")
+                        ).ok().flatten().unwrap_or_else(|| "en".to_string());
+                        let body = match lang.as_str() {
+                            "es-MX" => format!("Monitoreo pausado por {mins} min"),
+                            _ => format!("Clipboard monitoring paused for {mins} min"),
+                        };
+                        notify(app, &body);
+                    }
+                    "resume" => {
+                        let pause = app.state::<clipboard::ClipboardPause>();
+                        *pause.0.lock().unwrap() = clipboard::PauseState::Active;
+                        let _ = app.emit("clipboard-resumed", ());
+                        if let Some(tray) = app.try_state::<TrayMenuState>() {
+                            tray.set_paused(false);
+                        }
+                        let lang = tauri::async_runtime::block_on(
+                            db::get_setting(&app.state::<DbState>().0, "language")
+                        ).ok().flatten().unwrap_or_else(|| "en".to_string());
+                        let body = match lang.as_str() {
+                            "es-MX" => "Monitoreo de portapapeles reanudado",
+                            _ => "Clipboard monitoring resumed",
+                        };
+                        notify(app, body);
+                    }
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -220,6 +373,10 @@ pub fn run() {
             commands::reclassify_entries,
             commands::export_config,
             commands::import_config,
+            commands::clear_history,
+            commands::pause_clipboard,
+            commands::resume_clipboard,
+            commands::get_pause_state,
         ])
         .on_window_event(|window, event| {
             let app = window.app_handle();
@@ -267,6 +424,16 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Send a system notification. Silently ignores errors.
+pub fn notify(app: &tauri::AppHandle, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app.notification()
+        .builder()
+        .title("Clipboard Tool")
+        .body(body)
+        .show();
 }
 
 fn toggle_window(app: &tauri::AppHandle) {

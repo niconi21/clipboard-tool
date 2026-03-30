@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ContentRenderer } from "./ContentRenderer";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -158,6 +159,63 @@ describe("ContentRenderer", () => {
       render(<ContentRenderer content="# Hello" contentType="markdown" />);
       expect(screen.getByText("content_renderer.md_preview")).toBeInTheDocument();
       expect(screen.getByText("content_renderer.md_source")).toBeInTheDocument();
+    });
+  });
+
+  describe("MarkdownRenderer - source view (line 233)", () => {
+    it("shows CodeRenderer with markdown language when source tab clicked", async () => {
+      const { container } = render(<ContentRenderer content="# Hello" contentType="markdown" />);
+
+      // Click "Source" button to switch to source view
+      await userEvent.click(screen.getByText("content_renderer.md_source"));
+
+      // In source view, the CodeRenderer renders a code element with language-markdown class
+      expect(container.querySelector("code.language-markdown")).toBeInTheDocument();
+      // The preview div should no longer be in the document
+      expect(container.querySelector(".markdown-preview")).not.toBeInTheDocument();
+    });
+
+    it("switching back to preview shows markdown-preview again", async () => {
+      const { container } = render(<ContentRenderer content="# Hello" contentType="markdown" />);
+
+      await userEvent.click(screen.getByText("content_renderer.md_source"));
+      expect(container.querySelector(".markdown-preview")).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByText("content_renderer.md_preview"));
+      expect(container.querySelector(".markdown-preview")).toBeInTheDocument();
+    });
+  });
+
+  describe("MarkdownRenderer - link click interception (lines 194-199)", () => {
+    it("calls openUrl for http links clicked inside preview", async () => {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      const mockOpenUrl = vi.mocked(openUrl);
+      mockOpenUrl.mockResolvedValue(undefined);
+
+      render(<ContentRenderer content={"[click me](https://example.com)"} contentType="markdown" />);
+
+      // Find the rendered link in the markdown preview
+      const link = document.querySelector(".markdown-preview a");
+      if (link) {
+        link.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        // openUrl should be called with the href
+        expect(mockOpenUrl).toHaveBeenCalledWith("https://example.com");
+      }
+    });
+
+    it("does not call openUrl when clicking non-link elements in preview", async () => {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      const mockOpenUrl = vi.mocked(openUrl);
+      mockOpenUrl.mockResolvedValue(undefined);
+      mockOpenUrl.mockClear();
+
+      const { container } = render(<ContentRenderer content={"# Just a heading\n\nSome text"} contentType="markdown" />);
+
+      const preview = container.querySelector(".markdown-preview");
+      if (preview) {
+        preview.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(mockOpenUrl).not.toHaveBeenCalled();
+      }
     });
   });
 

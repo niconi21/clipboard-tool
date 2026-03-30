@@ -77,7 +77,13 @@ interface Props {
   onUpdateTheme: (slug: string, name: string, colors: ThemeColors) => Promise<void>;
   onDeleteTheme: (slug: string) => Promise<void>;
   onReclassify: (includeOverrides: boolean) => Promise<number>;
+  onClearHistory: () => Promise<number>;
   onConfigImported: () => void;
+  pauseSecsRemaining: number | null;
+  onPause: (minutes: number | null) => Promise<void>;
+  onResume: () => Promise<void>;
+  onRestartTutorial?: () => void;
+  onboardingTab?: string;
 }
 
 type Tab = "appearance" | "content-types" | "categories" | "collections" | "behavior" | "about";
@@ -123,10 +129,21 @@ export function SettingsPanel({
   onUpdateTheme,
   onDeleteTheme,
   onReclassify,
+  onClearHistory,
   onConfigImported,
+  pauseSecsRemaining,
+  onPause,
+  onResume,
+  onRestartTutorial,
+  onboardingTab,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
+
+  // Controlled tab override from onboarding tutorial
+  useEffect(() => {
+    if (onboardingTab) setActiveTab(onboardingTab as Tab);
+  }, [onboardingTab]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Theme editor state
@@ -137,6 +154,79 @@ export function SettingsPanel({
     colors: ThemeColors;
   } | null>(null);
   const [themeSaving, setThemeSaving] = useState(false);
+  const originalColorsRef = useRef<ThemeColors | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const themeEditorRef = useRef(themeEditor);
+  const revertPreviewRef = useRef<() => void>(() => {});
+  useEffect(() => { themeEditorRef.current = themeEditor; }, [themeEditor]);
+
+  // Revert CSS vars when settings panel closes with an open editor (e.g. X button)
+  useEffect(() => {
+    return () => {
+      if (themeEditorRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        revertPreviewRef.current();
+      }
+    };
+  }, []);
+
+  // Apply CSS variables directly for live preview
+  function applyPreviewColors(colors: ThemeColors) {
+    const root = document.documentElement.style;
+    root.setProperty("--color-base",           colors.base);
+    root.setProperty("--color-surface",        colors.surface);
+    root.setProperty("--color-surface-raised", colors.surface_raised);
+    root.setProperty("--color-surface-active", colors.surface_active);
+    root.setProperty("--color-stroke",         colors.stroke);
+    root.setProperty("--color-stroke-strong",  colors.stroke_strong);
+    root.setProperty("--color-content",        colors.content);
+    root.setProperty("--color-content-2",      colors.content_2);
+    root.setProperty("--color-content-3",      colors.content_3);
+    root.setProperty("--color-accent",         colors.accent);
+    root.setProperty("--color-accent-text",    colors.accent_text);
+  }
+
+  function revertPreview() {
+    const active = themes.find((t) => t.slug === activeThemeSlug) ?? themes[0];
+    if (active) applyPreviewColors({
+      base: active.base, surface: active.surface, surface_raised: active.surface_raised,
+      surface_active: active.surface_active, stroke: active.stroke, stroke_strong: active.stroke_strong,
+      content: active.content, content_2: active.content_2, content_3: active.content_3,
+      accent: active.accent, accent_text: active.accent_text,
+    });
+  }
+  revertPreviewRef.current = revertPreview;
+
+  function openThemeEditor(state: { mode: "create" | "edit"; slug?: string; name: string; colors: ThemeColors }) {
+    originalColorsRef.current = { ...state.colors };
+    applyPreviewColors(state.colors);
+    setThemeEditor(state);
+  }
+
+  function handleColorChange(key: keyof ThemeColors, value: string) {
+    if (!themeEditor) return;
+    const newColors = { ...themeEditor.colors, [key]: value };
+    setThemeEditor({ ...themeEditor, colors: newColors });
+    applyPreviewColors(newColors);
+    // Auto-save debounced in edit mode
+    if (themeEditor.mode === "edit" && themeEditor.slug) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(async () => {
+        try {
+          await onUpdateTheme(themeEditor.slug!, themeEditor.name, newColors);
+        } catch (e) {
+          console.error("[ThemeEditor] auto-save failed:", e);
+        }
+      }, 800);
+    }
+  }
+
+  function handleCancelEditor() {
+    clearTimeout(autoSaveTimerRef.current);
+    revertPreview();
+    setThemeEditor(null);
+    originalColorsRef.current = null;
+  }
 
   // Config export/import state
   const [exporting, setExporting] = useState(false);
@@ -176,6 +266,10 @@ export function SettingsPanel({
   const [reclassifyRunning, setReclassifyRunning] = useState(false);
   const [reclassifyResult, setReclassifyResult] = useState<number | null>(null);
 
+  const [clearHistoryDialog, setClearHistoryDialog] = useState(false);
+  const [clearHistoryRunning, setClearHistoryRunning] = useState(false);
+  const [clearHistoryResult, setClearHistoryResult] = useState<number | null>(null);
+
   async function handleReclassify() {
     setReclassifyRunning(true);
     setReclassifyResult(null);
@@ -188,6 +282,20 @@ export function SettingsPanel({
       setReclassifyRunning(false);
       setReclassifyDialog(false);
       setReclassifyIncludeOverrides(false);
+    }
+  }
+
+  async function handleClearHistory() {
+    setClearHistoryRunning(true);
+    setClearHistoryResult(null);
+    try {
+      const count = await onClearHistory();
+      setClearHistoryResult(count);
+    } catch (e) {
+      console.error("[ClearHistory] failed:", e);
+    } finally {
+      setClearHistoryRunning(false);
+      setClearHistoryDialog(false);
     }
   }
 
@@ -215,6 +323,9 @@ export function SettingsPanel({
   const maxEntries = getSetting("max_history_entries", "0");
   const retentionDays = getSetting("retention_days", "0");
   const dedupInterval = getSetting("dedup_interval_minutes", "5");
+  const pauseDuration = getSetting("pause_duration_minutes", "30");
+  const fontFamily   = getSetting("font_family", "system");
+  const fontSize     = getSetting("font_size", "16");
   const activeLang = getSetting("language", "en");
 
   return (
@@ -233,7 +344,7 @@ export function SettingsPanel({
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-0.5 px-3 pt-2 pb-0 shrink-0 border-b border-stroke overflow-x-auto">
+      <div data-tour="settings-tabs" className="flex items-center gap-0.5 px-3 pt-2 pb-0 shrink-0 border-b border-stroke overflow-x-auto">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -254,7 +365,7 @@ export function SettingsPanel({
 
         {/* ── Appearance ─────────────────────────────────────────── */}
         {activeTab === "appearance" && (
-          <>
+          <div data-tour="settings-appearance">
             <Section title={t("settings.appearance.theme_title")} description={t("settings.appearance.theme_desc")}>
               {themeEditor ? (
                 <div className="p-4 rounded-lg bg-surface border border-stroke space-y-4">
@@ -275,10 +386,7 @@ export function SettingsPanel({
                         <input
                           type="color"
                           value={themeEditor.colors[key]}
-                          onChange={(e) => setThemeEditor({
-                            ...themeEditor,
-                            colors: { ...themeEditor.colors, [key]: e.target.value },
-                          })}
+                          onChange={(e) => handleColorChange(key, e.target.value)}
                           className="w-8 h-8 rounded border border-stroke cursor-pointer shrink-0 bg-transparent"
                         />
                         <div className="min-w-0">
@@ -297,30 +405,48 @@ export function SettingsPanel({
                   </div>
 
                   <div className="flex items-center gap-2 pt-1">
-                    <button
-                      disabled={themeSaving || !themeEditor.name.trim()}
-                      onClick={async () => {
-                        setThemeSaving(true);
-                        try {
-                          if (themeEditor.mode === "create") {
+                    {themeEditor.mode === "create" ? (
+                      <button
+                        disabled={themeSaving || !themeEditor.name.trim()}
+                        onClick={async () => {
+                          setThemeSaving(true);
+                          try {
                             await onCreateTheme(themeEditor.name.trim(), themeEditor.colors);
-                          } else {
-                            await onUpdateTheme(themeEditor.slug!, themeEditor.name.trim(), themeEditor.colors);
+                            setThemeEditor(null);
+                            originalColorsRef.current = null;
+                          } catch (e) {
+                            console.error("[ThemeEditor] save failed:", e);
+                          } finally {
+                            setThemeSaving(false);
                           }
-                          setThemeEditor(null);
-                        } catch (e) {
-                          console.error("[ThemeEditor] save failed:", e);
-                        } finally {
-                          setThemeSaving(false);
-                        }
-                      }}
-                      className="px-3 py-1.5 text-xs font-medium rounded-lg text-white hover:opacity-90 transition-opacity disabled:opacity-30"
-                      style={{ backgroundColor: themeEditor.colors.accent }}
-                    >
-                      {t("settings.appearance.theme_save")}
-                    </button>
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg text-white hover:opacity-90 transition-opacity disabled:opacity-30"
+                        style={{ backgroundColor: themeEditor.colors.accent }}
+                      >
+                        {t("settings.appearance.theme_save")}
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-content-3 italic">{t("settings.appearance.theme_autosave")}</span>
+                    )}
+                    {themeEditor.mode === "edit" && originalColorsRef.current && (
+                      <button
+                        onClick={() => {
+                          const orig = originalColorsRef.current!;
+                          setThemeEditor({ ...themeEditor, colors: orig });
+                          applyPreviewColors(orig);
+                          clearTimeout(autoSaveTimerRef.current);
+                          autoSaveTimerRef.current = setTimeout(async () => {
+                            try { await onUpdateTheme(themeEditor.slug!, themeEditor.name, orig); }
+                            catch (e) { console.error("[ThemeEditor] reset save failed:", e); }
+                          }, 100);
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg text-content-2 hover:text-content hover:bg-surface-raised transition-colors border border-stroke"
+                      >
+                        {t("settings.appearance.theme_reset")}
+                      </button>
+                    )}
                     <button
-                      onClick={() => setThemeEditor(null)}
+                      onClick={handleCancelEditor}
                       className="px-3 py-1.5 text-xs font-medium rounded-lg text-content-2 hover:text-content hover:bg-surface-raised transition-colors border border-stroke"
                     >
                       {t("settings.appearance.theme_cancel")}
@@ -365,7 +491,7 @@ export function SettingsPanel({
                         <div className="flex items-center gap-1 shrink-0">
                           {/* Duplicate — available on all themes */}
                           <button
-                            onClick={() => setThemeEditor({
+                            onClick={() => openThemeEditor({
                               mode: "create",
                               name: `${theme.name} (copy)`,
                               colors: themeToColors(theme),
@@ -381,7 +507,7 @@ export function SettingsPanel({
                           {!theme.is_builtin && (
                             <>
                               <button
-                                onClick={() => setThemeEditor({ mode: "edit", slug: theme.slug, name: theme.name, colors: themeToColors(theme) })}
+                                onClick={() => openThemeEditor({ mode: "edit", slug: theme.slug, name: theme.name, colors: themeToColors(theme) })}
                                 className="p-1 rounded text-content-3 hover:text-content hover:bg-surface-raised transition-colors"
                                 title={t("settings.appearance.edit_theme")}
                               >
@@ -406,7 +532,7 @@ export function SettingsPanel({
                   </div>
 
                   <button
-                    onClick={() => setThemeEditor({
+                    onClick={() => openThemeEditor({
                       mode: "create",
                       name: "",
                       colors: {
@@ -424,6 +550,32 @@ export function SettingsPanel({
                   </button>
                 </>
               )}
+            </Section>
+
+            <Section title={t("settings.appearance.typography_title")} description={t("settings.appearance.typography_desc")}>
+              <div className="p-4 rounded-lg bg-surface border border-stroke space-y-4">
+                <SettingRow label={t("settings.appearance.font_family_label")} description={t("settings.appearance.font_family_desc")}>
+                  <select
+                    value={fontFamily}
+                    onChange={(e) => onSettingChange("font_family", e.target.value)}
+                    className="appearance-none bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content cursor-pointer hover:border-stroke-strong focus:outline-none focus:border-accent transition-colors shrink-0"
+                  >
+                    <option value="system">{t("settings.appearance.font_system")}</option>
+                    <option value="inter">Inter</option>
+                    <option value="mono">{t("settings.appearance.font_mono")}</option>
+                    <option value="serif">{t("settings.appearance.font_serif")}</option>
+                  </select>
+                </SettingRow>
+                <div className="border-t border-stroke" />
+                <SettingRow label={t("settings.appearance.font_size_label")} description={t("settings.appearance.font_size_desc")}>
+                  <input
+                    type="number" min="12" max="20" step="1"
+                    value={fontSize}
+                    onChange={(e) => { const v = e.target.value; if (v === "" || (Number(v) >= 12 && Number(v) <= 20)) onSettingChange("font_size", v); }}
+                    className="w-20 bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
+                  />
+                </SettingRow>
+              </div>
             </Section>
 
             {languages.length > 0 && (
@@ -453,11 +605,12 @@ export function SettingsPanel({
                 </div>
               </Section>
             )}
-          </>
+          </div>
         )}
 
         {/* ── Content Types ──────────────────────────────────────── */}
         {activeTab === "content-types" && (
+          <div data-tour="settings-content-types">
           <Section
             title={t("settings.content_types.section_title")}
             description={t("settings.content_types.section_desc")}
@@ -473,10 +626,12 @@ export function SettingsPanel({
               onToggleRule={onToggleContentTypeRule}
             />
           </Section>
+          </div>
         )}
 
         {/* ── Categories ─────────────────────────────────────────── */}
         {activeTab === "categories" && (
+          <div data-tour="settings-categories">
           <Section
             title={t("settings.categories.section_title")}
             description={t("settings.categories.section_desc")}
@@ -492,10 +647,12 @@ export function SettingsPanel({
               onToggleRule={onToggleContextRule}
             />
           </Section>
+          </div>
         )}
 
         {/* ── Collections ────────────────────────────────────────── */}
         {activeTab === "collections" && (
+          <div data-tour="settings-collections">
           <Section
             title={t("settings.collections_section.section_title")}
             description={t("settings.collections_section.section_desc")}
@@ -517,10 +674,12 @@ export function SettingsPanel({
               onDeleteSubcollection={onDeleteSubcollection}
             />
           </Section>
+          </div>
         )}
 
         {/* ── Behavior ───────────────────────────────────────────── */}
         {activeTab === "behavior" && (
+          <div data-tour="settings-behavior">
           <Section title={t("settings.behavior.section_title")} description={t("settings.behavior.section_desc")}>
             <div className="p-4 rounded-lg bg-surface border border-stroke space-y-4">
               <SettingRow
@@ -604,6 +763,64 @@ export function SettingsPanel({
                   className="w-28 bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
                 />
               </SettingRow>
+
+              <div className="border-t border-stroke" />
+
+              <SettingRow
+                label={t("settings_behavior_pause.label")}
+                description={t("settings_behavior_pause.desc")}
+              >
+                <input
+                  type="number" min="1" step="1"
+                  value={pauseDuration}
+                  onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 1) debouncedSettingChange("pause_duration_minutes", v); }}
+                  className="w-24 bg-surface-raised border border-stroke rounded-lg px-3 py-2 text-sm text-content font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all shrink-0"
+                />
+              </SettingRow>
+
+              <div className="border-t border-stroke" />
+
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-content">{t("settings_behavior_pause.monitor_label")}</p>
+                  <p className="text-xs text-content-3 mt-0.5">
+                    {pauseSecsRemaining === null
+                      ? t("settings_behavior_pause.status_active")
+                      : pauseSecsRemaining === -1
+                        ? t("settings_behavior_pause.status_indefinite")
+                        : t("settings_behavior_pause.status_timed", {
+                            time: pauseSecsRemaining >= 60
+                              ? `${Math.ceil(pauseSecsRemaining / 60)}m`
+                              : `${pauseSecsRemaining}s`
+                          })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {pauseSecsRemaining !== null ? (
+                    <button
+                      onClick={() => onResume()}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-accent-text hover:opacity-90 transition-opacity"
+                    >
+                      {t("pause.resume")}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => onPause(Number(pauseDuration) || 30)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors"
+                      >
+                        {t("settings_behavior_pause.pause_n", { n: pauseDuration })}
+                      </button>
+                      <button
+                        onClick={() => onPause(null)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors"
+                      >
+                        {t("settings_behavior_pause.pause_indefinite")}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
             <ReclassifyBlock
               dialog={reclassifyDialog}
@@ -615,32 +832,83 @@ export function SettingsPanel({
               onToggleOverrides={setReclassifyIncludeOverrides}
               onConfirm={handleReclassify}
             />
-            <div className="mt-4 pt-4 border-t border-stroke space-y-1.5">
-              <div className="flex items-center gap-2">
+
+            {/* Clear history */}
+            <div className="mt-4 p-4 rounded-lg bg-surface border border-stroke space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-content">{t("settings.behavior.clear_history_label")}</p>
+                  <p className="text-xs text-content-3 mt-0.5">{t("settings.behavior.clear_history_desc")}</p>
+                </div>
                 <button
-                  onClick={handleExport}
-                  disabled={exporting}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
+                  onClick={() => { setClearHistoryDialog(true); setClearHistoryResult(null); }}
+                  disabled={clearHistoryRunning}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50 shrink-0"
                 >
-                  {t("about.export_button")}
+                  {t("settings.behavior.clear_history_button")}
                 </button>
-                <button
-                  onClick={handleImport}
-                  disabled={importing}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
-                >
-                  {t("about.import_button")}
-                </button>
-                {exportDone && <span className="text-xs text-accent">{t("about.export_success")}</span>}
-                {importTotal !== null && <span className="text-xs text-accent">{t("about.import_result", { total: importTotal })}</span>}
               </div>
-              <p className="text-[11px] text-content-3">{t("about.config_desc")}</p>
+              {clearHistoryResult !== null && (
+                <p className="text-xs text-accent">{t("settings.behavior.clear_history_result", { count: clearHistoryResult })}</p>
+              )}
+              {clearHistoryDialog && (
+                <div className="p-3 rounded-lg bg-surface-raised border border-stroke space-y-3">
+                  <p className="text-sm text-content">{t("settings.behavior.clear_history_confirm")}</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleClearHistory}
+                      disabled={clearHistoryRunning}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-accent-text hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {clearHistoryRunning ? t("settings.behavior.clear_history_running") : t("common.delete")}
+                    </button>
+                    <button
+                      onClick={() => setClearHistoryDialog(false)}
+                      disabled={clearHistoryRunning}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content transition-colors disabled:opacity-50"
+                    >
+                      {t("common.cancel")}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 p-4 rounded-lg bg-surface border border-stroke space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-content">{t("about.config_title")}</p>
+                  <p className="text-xs text-content-3 mt-0.5">{t("about.config_desc")}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleExport}
+                    disabled={exporting}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
+                  >
+                    {t("about.export_button")}
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50"
+                  >
+                    {t("about.import_button")}
+                  </button>
+                </div>
+              </div>
+              {exportDone && <p className="text-xs text-accent">{t("about.export_success")}</p>}
+              {importTotal !== null && <p className="text-xs text-accent">{t("about.import_result", { total: importTotal })}</p>}
             </div>
           </Section>
+          </div>
         )}
 
         {/* ── About ──────────────────────────────────────────────────── */}
-        {activeTab === "about" && <AboutTab />}
+        {activeTab === "about" && (
+          <div data-tour="settings-about">
+            <AboutTab onRestartTutorial={onRestartTutorial} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -649,28 +917,37 @@ export function SettingsPanel({
 // ── Static dependency list ───────────────────────────────────────────────────
 
 const FRONTEND_DEPS: { name: string; version: string; licenseKey: string; url: string }[] = [
-  { name: "React",          version: "19",   licenseKey: "mit",        url: "https://react.dev" },
-  { name: "TypeScript",     version: "5.8",  licenseKey: "apache2",    url: "https://www.typescriptlang.org" },
-  { name: "Tauri JS API",   version: "2",    licenseKey: "mit_apache", url: "https://tauri.app" },
-  { name: "Tailwind CSS",   version: "4",    licenseKey: "mit",        url: "https://tailwindcss.com" },
-  { name: "Vite",           version: "7",    licenseKey: "mit",        url: "https://vitejs.dev" },
-  { name: "i18next",        version: "25",   licenseKey: "mit",        url: "https://www.i18next.com" },
-  { name: "react-i18next",  version: "16",   licenseKey: "mit",        url: "https://react.i18next.com" },
-  { name: "highlight.js",   version: "11",   licenseKey: "bsd3",       url: "https://highlightjs.org" },
+  { name: "React",                    version: "19",   licenseKey: "mit",        url: "https://react.dev" },
+  { name: "TypeScript",               version: "5.8",  licenseKey: "apache2",    url: "https://www.typescriptlang.org" },
+  { name: "Tauri JS API",             version: "2",    licenseKey: "mit_apache", url: "https://tauri.app" },
+  { name: "Tailwind CSS",             version: "4",    licenseKey: "mit",        url: "https://tailwindcss.com" },
+  { name: "Vite",                     version: "7",    licenseKey: "mit",        url: "https://vitejs.dev" },
+  { name: "i18next",                  version: "25",   licenseKey: "mit",        url: "https://www.i18next.com" },
+  { name: "react-i18next",            version: "16",   licenseKey: "mit",        url: "https://react.i18next.com" },
+  { name: "highlight.js",             version: "11",   licenseKey: "bsd3",       url: "https://highlightjs.org" },
+  { name: "marked",                   version: "15",   licenseKey: "mit",        url: "https://marked.js.org" },
+  { name: "DOMPurify",                version: "3",    licenseKey: "apache2",    url: "https://github.com/cure53/DOMPurify" },
+  { name: "@tauri-apps/plugin-opener",version: "2",    licenseKey: "mit_apache", url: "https://tauri.app" },
 ];
 
 const BACKEND_DEPS: { name: string; version: string; licenseKey: string; url: string }[] = [
-  { name: "Rust",    version: "1.77+",  licenseKey: "mit_apache", url: "https://www.rust-lang.org" },
-  { name: "Tauri",   version: "2",      licenseKey: "mit_apache", url: "https://tauri.app" },
-  { name: "SQLite",  version: "3",      licenseKey: "public_domain", url: "https://sqlite.org" },
-  { name: "sqlx",    version: "0.8",    licenseKey: "mit_apache", url: "https://github.com/launchbadge/sqlx" },
-  { name: "arboard", version: "3",      licenseKey: "mit_apache", url: "https://github.com/1Password/arboard" },
-  { name: "tokio",   version: "1",      licenseKey: "mit",        url: "https://tokio.rs" },
-  { name: "regex",   version: "1",      licenseKey: "mit_apache", url: "https://github.com/rust-lang/regex" },
-  { name: "serde",   version: "1",      licenseKey: "mit_apache", url: "https://serde.rs" },
+  { name: "Rust",                        version: "1.77+", licenseKey: "mit_apache",    url: "https://www.rust-lang.org" },
+  { name: "Tauri",                       version: "2",     licenseKey: "mit_apache",    url: "https://tauri.app" },
+  { name: "SQLite",                      version: "3",     licenseKey: "public_domain", url: "https://sqlite.org" },
+  { name: "sqlx",                        version: "0.8",   licenseKey: "mit_apache",    url: "https://github.com/launchbadge/sqlx" },
+  { name: "arboard",                     version: "3",     licenseKey: "mit_apache",    url: "https://github.com/1Password/arboard" },
+  { name: "tokio",                       version: "1",     licenseKey: "mit",           url: "https://tokio.rs" },
+  { name: "regex",                       version: "1",     licenseKey: "mit_apache",    url: "https://github.com/rust-lang/regex" },
+  { name: "serde",                       version: "1",     licenseKey: "mit_apache",    url: "https://serde.rs" },
+  { name: "serde_json",                  version: "1",     licenseKey: "mit_apache",    url: "https://github.com/serde-rs/json" },
+  { name: "image",                       version: "0.25",  licenseKey: "mit_apache",    url: "https://github.com/image-rs/image" },
+  { name: "sha2",                        version: "0.10",  licenseKey: "mit_apache",    url: "https://github.com/RustCrypto/hashes" },
+  { name: "base64",                      version: "0.22",  licenseKey: "mit_apache",    url: "https://github.com/marshallpierce/rust-base64" },
+  { name: "tauri-plugin-dialog",         version: "2",     licenseKey: "mit_apache",    url: "https://tauri.app" },
+  { name: "tauri-plugin-single-instance",version: "2",     licenseKey: "mit_apache",    url: "https://tauri.app" },
 ];
 
-function AboutTab() {
+function AboutTab({ onRestartTutorial }: { onRestartTutorial?: () => void }) {
   const { t } = useTranslation();
   const [version, setVersion] = useState("");
   const [dataDir, setDataDir] = useState("");
@@ -755,6 +1032,20 @@ function AboutTab() {
 
       {/* Backend deps */}
       <DepSection title={t("about.backend_title")} deps={BACKEND_DEPS} />
+
+      {onRestartTutorial && (
+        <div className="pt-2 border-t border-stroke">
+          <button
+            onClick={onRestartTutorial}
+            className="flex items-center gap-1.5 text-xs text-content-2 hover:text-content transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {t("onboarding.restart")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -825,26 +1116,26 @@ function ReclassifyBlock({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="mt-4 pt-4 border-t border-stroke space-y-2">
-      {!dialog ? (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onOpenDialog}
-              disabled={running}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke hover:border-accent hover:text-accent transition-colors text-content-2 disabled:opacity-50"
-            >
-              {running ? t("settings.reclassify.running") : t("settings.reclassify.button")}
-            </button>
-            {result !== null && (
-              <span className="text-xs text-accent">{t("settings.reclassify.result", { count: result })}</span>
-            )}
-          </div>
-          <p className="text-[11px] text-content-3">{t("settings.reclassify.desc")}</p>
+    <div className="mt-4 p-4 rounded-lg bg-surface border border-stroke space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-content">{t("settings.reclassify.button")}</p>
+          <p className="text-xs text-content-3 mt-0.5">{t("settings.reclassify.desc")}</p>
         </div>
-      ) : (
-        <div className="p-3 rounded-lg bg-surface border border-stroke space-y-3">
-          <p className="text-xs font-medium text-content">{t("settings.reclassify.confirm_title")}</p>
+        <button
+          onClick={onOpenDialog}
+          disabled={running}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content hover:border-accent transition-colors disabled:opacity-50 shrink-0"
+        >
+          {running ? t("settings.reclassify.running") : t("settings.reclassify.button")}
+        </button>
+      </div>
+      {result !== null && (
+        <p className="text-xs text-accent">{t("settings.reclassify.result", { count: result })}</p>
+      )}
+      {dialog && (
+        <div className="p-3 rounded-lg bg-surface-raised border border-stroke space-y-3">
+          <p className="text-sm text-content">{t("settings.reclassify.confirm_title")}</p>
           <label className="flex items-center gap-2 text-xs text-content-2 cursor-pointer">
             <input
               type="checkbox"
@@ -858,13 +1149,14 @@ function ReclassifyBlock({
             <button
               onClick={onConfirm}
               disabled={running}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-accent-text hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {running ? t("settings.reclassify.running") : t("settings.reclassify.button")}
             </button>
             <button
               onClick={onCloseDialog}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content transition-colors"
+              disabled={running}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-stroke text-content-2 hover:text-content transition-colors disabled:opacity-50"
             >
               {t("common.cancel")}
             </button>

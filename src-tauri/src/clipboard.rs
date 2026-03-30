@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use arboard::Clipboard;
 use sha2::{Digest, Sha256};
@@ -31,6 +31,61 @@ pub struct AppCopiedImageHash(pub Arc<Mutex<Option<String>>>);
 impl AppCopiedImageHash {
     pub fn new() -> Self {
         Self(Arc::new(Mutex::new(None)))
+    }
+}
+
+/// Clipboard monitoring pause state.
+#[derive(Debug)]
+pub enum PauseState {
+    Active,
+    Indefinite,
+    Until(Instant),
+}
+
+pub struct ClipboardPause(pub Arc<Mutex<PauseState>>);
+
+impl ClipboardPause {
+    pub fn new() -> Self {
+        Self(Arc::new(Mutex::new(PauseState::Active)))
+    }
+}
+
+/// Returns `true` if the watcher should skip this tick (paused).
+/// Handles auto-resume when a timed pause expires.
+fn check_pause(app: &AppHandle) -> bool {
+    let Some(pause) = app.try_state::<ClipboardPause>() else {
+        return false;
+    };
+    let mut guard = pause.0.lock().unwrap();
+    match &*guard {
+        PauseState::Active => false,
+        PauseState::Indefinite => true,
+        PauseState::Until(until) => {
+            if Instant::now() < *until {
+                true
+            } else {
+                *guard = PauseState::Active;
+                drop(guard);
+                let _ = app.emit("clipboard-resumed", ());
+                if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
+                    tray.set_paused(false);
+                }
+                let body = tauri::async_runtime::block_on(async {
+                    if let Some(db) = app.try_state::<crate::db::DbState>() {
+                        let lang = crate::db::get_setting(&db.0, "language")
+                            .await.ok().flatten().unwrap_or_else(|| "en".to_string());
+                        match lang.as_str() {
+                            "es-MX" => "Monitoreo de portapapeles reanudado",
+                            _ => "Clipboard monitoring resumed",
+                        }.to_string()
+                    } else {
+                        "Clipboard monitoring resumed".to_string()
+                    }
+                });
+                crate::notify(app, &body);
+                false
+            }
+        }
     }
 }
 
@@ -72,6 +127,10 @@ pub fn start_watcher(app: AppHandle) {
             let poll_ms = if visible { 500 } else { 2000 };
             std::thread::sleep(Duration::from_millis(poll_ms));
 
+            // ── Pause check — still read clipboard to keep last_content
+            //    in sync, but skip save/emit while paused ─────────────────
+            let paused = check_pause(&app);
+
             // ── Try text first ──────────────────────────────────────────
             let got_text = match clipboard.get_text() {
                 Ok(text) if !text.is_empty() => {
@@ -79,39 +138,43 @@ pub fn start_watcher(app: AppHandle) {
                         true // text unchanged, skip but don't try image
                     } else if text.len() > MAX_CLIPBOARD_BYTES {
                         let bytes = text.len();
-                        if let Some(audit) = app.try_state::<AuditLog>() {
-                            audit.log(
-                                "entry_oversized",
-                                serde_json::json!({ "bytes": bytes, "limit": MAX_CLIPBOARD_BYTES }),
-                            );
-                        }
-                        if let Some(log) = app.try_state::<AppLog>() {
-                            log.warn("watcher", &format!("entry dropped: {bytes} bytes exceeds {MAX_CLIPBOARD_BYTES} limit"));
+                        if !paused {
+                            if let Some(audit) = app.try_state::<AuditLog>() {
+                                audit.log(
+                                    "entry_oversized",
+                                    serde_json::json!({ "bytes": bytes, "limit": MAX_CLIPBOARD_BYTES }),
+                                );
+                            }
+                            if let Some(log) = app.try_state::<AppLog>() {
+                                log.warn("watcher", &format!("entry dropped: {bytes} bytes exceeds {MAX_CLIPBOARD_BYTES} limit"));
+                            }
                         }
                         last_content = text;
                         true
                     } else {
                         last_content = text.clone();
 
-                        // Skip content copied from app itself
-                        let is_self_copy = if let Some(state) = app.try_state::<AppCopiedContent>() {
-                            let mut app_copied = state.0.lock().unwrap();
-                            if app_copied.as_deref() == Some(text.as_str()) {
-                                *app_copied = None;
-                                true
+                        if !paused {
+                            // Skip content copied from app itself
+                            let is_self_copy = if let Some(state) = app.try_state::<AppCopiedContent>() {
+                                let mut app_copied = state.0.lock().unwrap();
+                                if app_copied.as_deref() == Some(text.as_str()) {
+                                    *app_copied = None;
+                                    true
+                                } else {
+                                    false
+                                }
                             } else {
                                 false
-                            }
-                        } else {
-                            false
-                        };
+                            };
 
-                        if !is_self_copy {
-                            let ctx = get_active_context();
-                            let app_clone = app.clone();
-                            tauri::async_runtime::spawn(async move {
-                                handle_text_entry(app_clone, text, ctx).await;
-                            });
+                            if !is_self_copy {
+                                let ctx = get_active_context();
+                                let app_clone = app.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    handle_text_entry(app_clone, text, ctx).await;
+                                });
+                            }
                         }
                         true
                     }
@@ -138,7 +201,12 @@ pub fn start_watcher(app: AppHandle) {
             if last_image_hash.as_deref() == Some(hash_hex.as_str()) {
                 continue;
             }
+            // Always update hash to stay in sync even when paused
             last_image_hash = Some(hash_hex.clone());
+
+            if paused {
+                continue;
+            }
 
             // Check raw size
             let raw_size = img_data.bytes.len();
@@ -229,6 +297,102 @@ async fn handle_text_entry(
                 log.error("watcher", &format!("save entry failed: {e}"));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn clipboard_pause_new_initializes_with_active() {
+        let pause = ClipboardPause::new();
+        let guard = pause.0.lock().unwrap();
+        assert!(matches!(*guard, PauseState::Active));
+    }
+
+    #[test]
+    fn app_copied_content_new_initializes_with_none() {
+        let acc = AppCopiedContent::new();
+        let guard = acc.0.lock().unwrap();
+        assert!(guard.is_none());
+    }
+
+    #[test]
+    fn app_copied_image_hash_new_initializes_with_none() {
+        let acih = AppCopiedImageHash::new();
+        let guard = acih.0.lock().unwrap();
+        assert!(guard.is_none());
+    }
+
+    #[test]
+    fn pause_state_until_past_is_expired() {
+        // A deadline in the past means the pause is over
+        let past = Instant::now() - Duration::from_secs(5);
+        let state = PauseState::Until(past);
+        // We can't call check_pause without an AppHandle, but we can inspect the variant
+        // and verify the logic: Instant::now() >= past → expired
+        if let PauseState::Until(until) = state {
+            assert!(Instant::now() >= until, "past deadline should be considered expired");
+        } else {
+            panic!("expected PauseState::Until");
+        }
+    }
+
+    #[test]
+    fn pause_state_until_future_is_not_expired() {
+        let future = Instant::now() + Duration::from_secs(60);
+        let state = PauseState::Until(future);
+        if let PauseState::Until(until) = state {
+            assert!(Instant::now() < until, "future deadline should NOT be considered expired");
+        } else {
+            panic!("expected PauseState::Until");
+        }
+    }
+
+    #[test]
+    fn pause_state_indefinite_variant_exists() {
+        let state = PauseState::Indefinite;
+        assert!(matches!(state, PauseState::Indefinite));
+    }
+
+    #[test]
+    fn clipboard_pause_can_be_set_to_indefinite() {
+        let pause = ClipboardPause::new();
+        {
+            let mut guard = pause.0.lock().unwrap();
+            *guard = PauseState::Indefinite;
+        }
+        let guard = pause.0.lock().unwrap();
+        assert!(matches!(*guard, PauseState::Indefinite));
+    }
+
+    #[test]
+    fn clipboard_pause_can_be_set_to_until() {
+        let pause = ClipboardPause::new();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        {
+            let mut guard = pause.0.lock().unwrap();
+            *guard = PauseState::Until(deadline);
+        }
+        let guard = pause.0.lock().unwrap();
+        assert!(matches!(*guard, PauseState::Until(_)));
+    }
+
+    #[test]
+    fn clipboard_pause_can_be_reset_to_active() {
+        let pause = ClipboardPause::new();
+        {
+            let mut guard = pause.0.lock().unwrap();
+            *guard = PauseState::Indefinite;
+        }
+        {
+            let mut guard = pause.0.lock().unwrap();
+            *guard = PauseState::Active;
+        }
+        let guard = pause.0.lock().unwrap();
+        assert!(matches!(*guard, PauseState::Active));
     }
 }
 

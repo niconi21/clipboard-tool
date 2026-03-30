@@ -234,4 +234,117 @@ describe("useClipboard", () => {
       expect(result.current.entries).toHaveLength(5);
     });
   });
+
+  describe("real-time listener with active filters (lines 100-101)", () => {
+    it("calls load() when new entry arrives and search is active", async () => {
+      let listenerCallback: ((event: { payload: ClipboardEntry }) => void) | null = null;
+      mockListen.mockImplementation((_event, cb) => {
+        listenerCallback = cb as typeof listenerCallback;
+        return Promise.resolve(() => {});
+      });
+
+      const firstPage = [makeEntry(1)];
+      const reloadedPage = [makeEntry(99), makeEntry(1)];
+      mockInvoke
+        .mockResolvedValueOnce(firstPage)
+        .mockResolvedValueOnce(reloadedPage); // after reload triggered by new entry
+
+      const { result } = renderHook(() =>
+        useClipboard("hello", EMPTY_FILTERS, 50, false, null, null, true)
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      const newEntry = makeEntry(99);
+      await act(async () => {
+        listenerCallback?.({ payload: newEntry });
+      });
+
+      // With active search, load() is called — entries should be refreshed
+      await waitFor(() => expect(result.current.entries).toHaveLength(2));
+      expect(result.current.entries[0].id).toBe(99);
+    });
+
+    it("ignores new entries when favoriteOnly=true", async () => {
+      let listenerCallback: ((event: { payload: ClipboardEntry }) => void) | null = null;
+      mockListen.mockImplementation((_event, cb) => {
+        listenerCallback = cb as typeof listenerCallback;
+        return Promise.resolve(() => {});
+      });
+      mockInvoke.mockResolvedValue([makeEntry(1, { is_favorite: true })]);
+
+      const { result } = renderHook(() =>
+        useClipboard("", EMPTY_FILTERS, 50, true, null, null, true) // favoriteOnly=true
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      const newEntry = makeEntry(99);
+      act(() => {
+        listenerCallback?.({ payload: newEntry });
+      });
+
+      // New entry should NOT be prepended in favorites-only mode
+      expect(result.current.entries).toHaveLength(1);
+      expect(result.current.entries[0].id).toBe(1);
+    });
+
+    it("ignores new entries when collectionId is not null", async () => {
+      let listenerCallback: ((event: { payload: ClipboardEntry }) => void) | null = null;
+      mockListen.mockImplementation((_event, cb) => {
+        listenerCallback = cb as typeof listenerCallback;
+        return Promise.resolve(() => {});
+      });
+      mockInvoke.mockResolvedValue([makeEntry(1)]);
+
+      const { result } = renderHook(() =>
+        useClipboard("", EMPTY_FILTERS, 50, false, 5, null, true) // collectionId=5
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      const newEntry = makeEntry(99);
+      act(() => {
+        listenerCallback?.({ payload: newEntry });
+      });
+
+      // New entry should NOT be prepended in collection view
+      expect(result.current.entries).toHaveLength(1);
+    });
+  });
+
+  describe("removeEntryFromView (lines 151-155)", () => {
+    it("removes entry from view without invoking delete", async () => {
+      const entries = [makeEntry(1), makeEntry(2), makeEntry(3)];
+      mockInvoke.mockResolvedValue(entries);
+
+      const { result } = renderHook(() =>
+        useClipboard("", EMPTY_FILTERS, 50, false, null, null, true)
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      act(() => {
+        result.current.removeEntryFromView(2);
+      });
+
+      expect(result.current.entries).toHaveLength(2);
+      expect(result.current.entries.find((e) => e.id === 2)).toBeUndefined();
+    });
+
+    it("removeEntryFromView does not call invoke", async () => {
+      const entries = [makeEntry(1)];
+      mockInvoke.mockResolvedValue(entries);
+
+      const { result } = renderHook(() =>
+        useClipboard("", EMPTY_FILTERS, 50, false, null, null, true)
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      const callsBefore = mockInvoke.mock.calls.length;
+
+      act(() => {
+        result.current.removeEntryFromView(1);
+      });
+
+      // No additional invoke calls
+      expect(mockInvoke.mock.calls.length).toBe(callsBefore);
+    });
+  });
 });

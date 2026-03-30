@@ -1,5 +1,5 @@
 use regex::Regex;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 use crate::audit::{AppLog, AuditLog};
 use crate::categorizer::RulesCache;
@@ -618,16 +618,21 @@ pub async fn update_setting(
 
     // Update tray menu labels immediately when the language changes
     if key == "language" {
-        let (lbl_open, lbl_close, lbl_quit) = crate::tray_labels(&value);
+        let lbl = crate::tray_labels(&value);
         if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
-            if let Ok(mut open) = tray.open_label.lock() { *open = lbl_open.to_string(); }
-            if let Ok(mut close) = tray.close_label.lock() { *close = lbl_close.to_string(); }
-            let _ = tray.quit.set_text(lbl_quit);
+            if let Ok(mut open) = tray.open_label.lock() { *open = lbl.open.to_string(); }
+            if let Ok(mut close) = tray.close_label.lock() { *close = lbl.close.to_string(); }
+            let _ = tray.quit.set_text(lbl.quit);
+            let _ = tray.pause_5.set_text(lbl.pause_5);
+            let _ = tray.pause_10.set_text(lbl.pause_10);
+            let _ = tray.pause_15.set_text(lbl.pause_15);
+            let _ = tray.pause_indefinite.set_text(lbl.pause_indefinite);
+            let _ = tray.resume.set_text(lbl.resume);
             // Set toggle label based on current window visibility
             let visible = app.get_webview_window("main")
                 .and_then(|w| w.is_visible().ok())
                 .unwrap_or(false);
-            let _ = tray.toggle.set_text(if visible { lbl_close } else { lbl_open });
+            let _ = tray.toggle.set_text(if visible { lbl.close } else { lbl.open });
         }
     }
 
@@ -1299,6 +1304,98 @@ pub async fn import_config(
 
     app_log.info("import_config", &format!("imported config: {:?}", summary));
     Ok(summary)
+}
+
+#[tauri::command]
+pub async fn pause_clipboard(
+    app: tauri::AppHandle,
+    state: State<'_, DbState>,
+    minutes: Option<u64>, // None = indefinite
+) -> Result<i64, String> {
+    let pause = app.state::<crate::clipboard::ClipboardPause>();
+    let resume_secs: i64 = if let Some(mins) = minutes {
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(mins * 60);
+        *pause.0.lock().unwrap() = crate::clipboard::PauseState::Until(until);
+        mins as i64 * 60
+    } else {
+        *pause.0.lock().unwrap() = crate::clipboard::PauseState::Indefinite;
+        -1
+    };
+    let _ = app.emit("clipboard-paused", resume_secs);
+    if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
+        tray.set_paused(true);
+    }
+    // Read custom duration to refresh tray label
+    let pool = &state.0;
+    let custom_mins: u64 = crate::db::get_setting(pool, "pause_duration_minutes")
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
+    if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
+        tray.update_custom_label(custom_mins);
+    }
+    // Notification
+    let lang = crate::db::get_setting(pool, "language").await.ok().flatten().unwrap_or_else(|| "en".to_string());
+    let body = if resume_secs == -1 {
+        match lang.as_str() {
+            "es-MX" => "Monitoreo pausado indefinidamente".to_string(),
+            _ => "Clipboard monitoring paused".to_string(),
+        }
+    } else {
+        let mins = resume_secs / 60;
+        match lang.as_str() {
+            "es-MX" => format!("Monitoreo pausado por {mins} min"),
+            _ => format!("Clipboard monitoring paused for {mins} min"),
+        }
+    };
+    crate::notify(&app, &body);
+    Ok(resume_secs)
+}
+
+#[tauri::command]
+pub async fn resume_clipboard(app: tauri::AppHandle, state: State<'_, DbState>) -> Result<(), String> {
+    let pause = app.state::<crate::clipboard::ClipboardPause>();
+    *pause.0.lock().unwrap() = crate::clipboard::PauseState::Active;
+    let _ = app.emit("clipboard-resumed", ());
+    if let Some(tray) = app.try_state::<crate::TrayMenuState>() {
+        tray.set_paused(false);
+    }
+    // Notification
+    let lang = crate::db::get_setting(&state.0, "language").await.ok().flatten().unwrap_or_else(|| "en".to_string());
+    let body = match lang.as_str() {
+        "es-MX" => "Monitoreo de portapapeles reanudado",
+        _ => "Clipboard monitoring resumed",
+    };
+    crate::notify(&app, body);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_pause_state(app: tauri::AppHandle) -> Result<Option<i64>, String> {
+    let pause = app.state::<crate::clipboard::ClipboardPause>();
+    let guard = pause.0.lock().unwrap();
+    match &*guard {
+        crate::clipboard::PauseState::Active => Ok(None),
+        crate::clipboard::PauseState::Indefinite => Ok(Some(-1)),
+        crate::clipboard::PauseState::Until(until) => {
+            let remaining = until.saturating_duration_since(std::time::Instant::now());
+            Ok(Some(remaining.as_secs() as i64))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn clear_history(
+    app: tauri::AppHandle,
+    state: State<'_, DbState>,
+) -> Result<u64, String> {
+    let deleted = crate::db::clear_history(&state.0).await.map_err(db_err)?;
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        let _ = crate::db::cleanup_orphaned_images(&data_dir, &state.0).await;
+    }
+    Ok(deleted)
 }
 
 #[cfg(test)]

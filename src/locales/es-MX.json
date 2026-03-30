@@ -109,6 +109,8 @@
       "theme_name": "Nombre",
       "theme_name_placeholder": "Mi tema",
       "theme_save": "Guardar tema",
+      "theme_autosave": "Los cambios se guardan automáticamente",
+      "theme_reset": "Restablecer",
       "theme_cancel": "Cancelar",
       "theme_slot_base": "Base",
       "theme_slot_surface": "Superficie",
@@ -122,7 +124,16 @@
       "theme_slot_accent": "Acento",
       "theme_slot_accent_text": "Texto acento",
       "language_title": "Idioma",
-      "language_desc": "Selecciona el idioma de la interfaz"
+      "language_desc": "Selecciona el idioma de la interfaz",
+      "typography_title": "Tipografía",
+      "typography_desc": "Fuente y tamaño usados en toda la interfaz",
+      "font_family_label": "Familia tipográfica",
+      "font_family_desc": "Los cambios se aplican de inmediato",
+      "font_system": "Sistema",
+      "font_mono": "Monoespaciada",
+      "font_serif": "Serif",
+      "font_size_label": "Tamaño de fuente (px)",
+      "font_size_desc": "Tamaño base: 12–20 px. Escala todo el texto proporcionalmente"
     },
     "content_types": {
       "section_title": "Tipos de contenido y reglas",
@@ -150,7 +161,13 @@
       "max_bytes_label": "Máx. bytes a analizar",
       "max_bytes_desc": "El contenido más largo que esto se trunca antes de aplicar patrones. <code>0</code> = sin límite.",
       "max_image_label": "Máx. tamaño de imagen (bytes)",
-      "max_image_desc": "Tamaño máximo de imágenes del portapapeles a capturar. <code>0</code> = sin límite."
+      "max_image_desc": "Tamaño máximo de imágenes del portapapeles a capturar. <code>0</code> = sin límite.",
+      "clear_history_label": "Limpiar historial",
+      "clear_history_desc": "Elimina todas las entradas que no están guardadas en una colección. Las entradas en cualquier colección (incluyendo Favoritos) se conservan.",
+      "clear_history_button": "Limpiar ahora",
+      "clear_history_confirm": "¿Eliminar todas las entradas del historial que no están en ninguna colección? Esta acción no se puede deshacer.",
+      "clear_history_running": "Eliminando…",
+      "clear_history_result": "{{count}} entradas eliminadas"
     },
     "reclassify": {
       "button": "Reclasificar entradas",
@@ -244,6 +261,26 @@
     "count_one": "{{count}} entrada",
     "count_other": "{{count}} entradas"
   },
+  "pause": {
+    "banner_timed": "Monitoreo pausado · reanuda en {{time}}",
+    "banner_indefinite": "Monitoreo pausado",
+    "resume": "Reanudar",
+    "paused_indicator": "Pausado"
+  },
+  "settings_behavior_pause": {
+    "label": "Duración de pausa personalizada (min)",
+    "desc": "Duración que usan la opción \"Pausar N min\" del tray y el botón.",
+    "monitor_label": "Monitoreo de portapapeles",
+    "status_active": "Activo — capturando cambios del portapapeles",
+    "status_indefinite": "Pausado indefinidamente",
+    "status_timed": "Pausado · reanuda en {{time}}",
+    "pause_n": "Pausar {{n}} min",
+    "pause_indefinite": "Pausar indefinidamente"
+  },
+  "validation": {
+    "duplicate_name": "Nombre ya en uso",
+    "duplicate_id": "ID ya en uso"
+  },
   "about": {
     "description": "Gestor de portapapeles local. Sin sincronización en la nube ni telemetría.",
     "version_label": "Versión",
@@ -265,5 +302,36 @@
     "import_button": "Importar",
     "export_success": "Configuración exportada",
     "import_result": "Importado: {{total}} elementos"
+  },
+  "onboarding": {
+    "s0_title": "Bienvenido a Clipboard Tool",
+    "s0_desc": "Tu historial del portapapeles, organizado y con búsqueda. Te mostramos cómo funciona.",
+    "s1_title": "Tu historial del portapapeles",
+    "s1_desc": "Todo lo que copias aparece aquí automáticamente. Haz clic en cualquier entrada para ver el contenido completo.",
+    "s2_title": "Busca en tu historial",
+    "s2_desc": "Encuentra cualquier entrada al instante escribiendo — busca contenido, nombres de apps y más.",
+    "s3_title": "Colecciones y favoritos",
+    "s3_desc": "Organiza entradas en colecciones. Arrastra y suelta entradas en las pestañas para agregarlas.",
+    "s4_title": "Configuración",
+    "s4_desc": "Haz clic en el ícono de engranaje para abrir la configuración. Veamos qué hay dentro.",
+    "s5_title": "Pestañas de configuración",
+    "s5_desc": "Seis pestañas para diferentes áreas: Apariencia, Tipos de contenido, Categorías, Colecciones, Comportamiento y Acerca de.",
+    "s6_title": "Apariencia",
+    "s6_desc": "Elige un tema, personaliza las fuentes y cambia el idioma de la aplicación.",
+    "s7_title": "Tipos de contenido",
+    "s7_desc": "Define cómo se detectan y clasifican las entradas: URL, correo, código, JSON y más. Agrega tipos personalizados con reglas regex.",
+    "s8_title": "Categorías",
+    "s8_desc": "Asigna entradas automáticamente a categorías según la app origen o el título de ventana. Útil para separar trabajo de uso personal.",
+    "s9_title": "Colecciones",
+    "s9_desc": "Crea colecciones con nombre para agrupar entradas relacionadas. Configura reglas de auto-asignación para organizar automáticamente.",
+    "s10_title": "Comportamiento",
+    "s10_desc": "Configura límites de historial, reglas de retención, duración de pausa, deduplicación y otros comportamientos de la app.",
+    "s11_title": "Acerca de",
+    "s11_desc": "Consulta la versión de la app, ruta de la base de datos, exporta/importa tu configuración y reinicia este tutorial cuando quieras.",
+    "skip": "Saltar tutorial",
+    "start": "Iniciar tour",
+    "next": "Siguiente",
+    "finish": "Comenzar",
+    "restart": "Reiniciar tutorial"
   }
 }

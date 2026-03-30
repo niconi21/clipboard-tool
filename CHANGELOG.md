@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-03-29
+
+### Added
+- feat(#63): interactive onboarding tutorial — spotlight-style step-by-step walkthrough triggered on first launch; re-accessible from Settings > About; skip option; i18n support
+- feat(#60): live theme editor — color picker changes apply instantly via CSS variables; edit mode auto-saves to DB with 800ms debounce; cancel reverts to active theme; Reset button restores pre-edit colors
+- feat(#62): built-in Light theme — clean light color palette selectable from Settings > Appearance
+- feat(#55): hide "Sin clasificar" subcollection when it has 0 entries; auto-navigate to "All" if it was active when count drops to 0
+- feat(#56): floating scroll-to-top button in entry list — appears after scrolling 200px, fades in/out, smooth scroll on click
+- feat(#57): "Clear history" button in Settings > Behavior — deletes all entries not in any collection (same exemption as auto-cleanup); confirmation dialog; count shown on completion
+- feat(#61): inline duplicate-name validation in Categories, Collections and Content Types managers — border turns red and error message appears immediately; Add button stays disabled until resolved
+- feat(#58): pause clipboard monitoring — tray menu offers Pause 5/10/15/custom min + Resume; banner in main UI shows countdown and Resume button; auto-resumes when timer expires; custom duration configurable in Settings > Behavior
+
+### Fixed
+- fix(#54): subcollection counter now updates immediately after reclassifying an entry via drag & drop or the collection selector dropdown; reclassified entries are also removed from the current subcollection view optimistically
+
+## [1.3.0] - 2026-03-18
+
 ### Added
 - feat(#43): drag & drop entries onto collection tabs to add them to a collection; drag entries onto subcollection rows to move them within a collection
 
@@ -16,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - fix(#42): changing content type in DetailPanel now shows a visible error message if the update fails; error auto-dismisses after 3 seconds
 - fix: upgrade from v1.0.0/v1.1.0 would silently lose manual content type overrides — `entries.manual_override` column was missing from the ALTER TABLE migration path (only present in fresh installs)
+- fix: remove stub `@types/testing-library__jest-dom` that caused TS2688 build error (types are now bundled with `@testing-library/jest-dom`)
 
 ## [1.2.1] - 2026-03-13
 

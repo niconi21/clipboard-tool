@@ -57,6 +57,13 @@ export function ContentTypesManager({
     setNewColor(PRESET_COLORS[0]);
   }
 
+  const newNameError = newName.trim() && contentTypes.some((ct) => ct.name.toLowerCase() === newName.trim().toLowerCase())
+    ? t("validation.duplicate_id")
+    : null;
+  const newLabelError = newLabel.trim() && contentTypes.some((ct) => ct.label.toLowerCase() === newLabel.trim().toLowerCase())
+    ? t("validation.duplicate_name")
+    : null;
+
   const patternError = validateRegexPattern(newPattern.trim());
 
   async function handleAddRule(typeName: string) {
@@ -197,22 +204,28 @@ export function ContentTypesManager({
         <p className="text-xs font-medium text-content-2">{t("content_types_mgr.new_type")}</p>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full border border-stroke shrink-0" style={{ backgroundColor: newColor }} />
-          <input
-            placeholder={t("content_types_mgr.name_placeholder")}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className="w-28 bg-surface-raised border border-stroke rounded px-2 py-1.5 text-xs font-mono text-content placeholder:text-content-3 focus:outline-none focus:border-accent"
-          />
-          <input
-            placeholder={t("content_types_mgr.label_placeholder")}
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleCreateType(); }}
-            className="flex-1 bg-surface-raised border border-stroke rounded px-2 py-1.5 text-sm text-content placeholder:text-content-3 focus:outline-none focus:border-accent"
-          />
+          <div className="flex flex-col gap-0.5">
+            <input
+              placeholder={t("content_types_mgr.name_placeholder")}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className={`w-28 bg-surface-raised border rounded px-2 py-1.5 text-xs font-mono text-content placeholder:text-content-3 focus:outline-none transition-colors ${newNameError ? "border-danger focus:border-danger" : "border-stroke focus:border-accent"}`}
+            />
+            {newNameError && <p className="text-[10px] text-danger">{newNameError}</p>}
+          </div>
+          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+            <input
+              placeholder={t("content_types_mgr.label_placeholder")}
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !newNameError && !newLabelError) handleCreateType(); }}
+              className={`w-full bg-surface-raised border rounded px-2 py-1.5 text-sm text-content placeholder:text-content-3 focus:outline-none transition-colors ${newLabelError ? "border-danger focus:border-danger" : "border-stroke focus:border-accent"}`}
+            />
+            {newLabelError && <p className="text-[10px] text-danger">{newLabelError}</p>}
+          </div>
           <button
             onClick={handleCreateType}
-            disabled={!newName.trim() || !newLabel.trim()}
+            disabled={!newName.trim() || !newLabel.trim() || !!newNameError || !!newLabelError}
             className="px-3 py-1.5 rounded bg-accent/20 text-accent text-sm font-medium hover:bg-accent/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {t("common.add")}

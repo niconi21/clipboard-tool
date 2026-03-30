@@ -14,6 +14,7 @@ interface Props {
   colorFor: (name: string) => string;
   onClose: () => void;
   onCollectionChanged?: (entryId: number, collectionIds: number[]) => void;
+  onSubcollectionChanged?: (entryId: number) => void;
   onAliasChanged?: (entryId: number, alias: string | null) => void;
   onContentTypeChanged?: (entryId: number, contentType: string) => void;
 }
@@ -30,7 +31,7 @@ async function copyEntry(entry: ClipboardEntry) {
   }
 }
 
-export function DetailPanel({ entry, collections, subcollections, contentTypes, colorFor, onClose, onCollectionChanged, onAliasChanged, onContentTypeChanged }: Props) {
+export function DetailPanel({ entry, collections, subcollections, contentTypes, colorFor, onClose, onCollectionChanged, onSubcollectionChanged, onAliasChanged, onContentTypeChanged }: Props) {
   const { t, i18n } = useTranslation();
   const color = colorFor(entry.content_type);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -258,6 +259,7 @@ export function DetailPanel({ entry, collections, subcollections, contentTypes, 
               collections={collections}
               subcollections={subcollections}
               onChanged={(ids) => onCollectionChanged?.(entry.id, ids)}
+              onSubcollectionChanged={onSubcollectionChanged}
             />
           </div>
         )}
