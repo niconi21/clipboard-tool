@@ -42,6 +42,7 @@ function App() {
   // pauseSecsRemaining: null = active, -1 = indefinite, >0 = seconds remaining
   const [pauseSecsRemaining, setPauseSecsRemaining] = useState<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [settingsTabOverride, setSettingsTabOverride] = useState<string | undefined>(undefined);
   const [isDragging, setIsDragging] = useState(false);
   const [draggingEntry, setDraggingEntry] = useState<ClipboardEntry | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<number | null>(null);
@@ -431,11 +432,15 @@ function App() {
   // ── Onboarding ─────────────────────────────────────────────────────────────
   const handleCompleteOnboarding = useCallback(async () => {
     setShowOnboarding(false);
+    setSettingsOpen(false);
+    setSettingsTabOverride(undefined);
     await invoke("update_setting", { key: "onboarding_completed", value: "1" }).catch(console.error);
   }, []);
 
   const handleSkipOnboarding = useCallback(async () => {
     setShowOnboarding(false);
+    setSettingsOpen(false);
+    setSettingsTabOverride(undefined);
     await invoke("update_setting", { key: "onboarding_completed", value: "1" }).catch(console.error);
   }, []);
 
@@ -611,6 +616,7 @@ function App() {
             onPause={(minutes) => invoke("pause_clipboard", { minutes: minutes ?? undefined }).then(() => {}).catch(console.error)}
             onResume={() => invoke("resume_clipboard").then(() => {}).catch(console.error)}
             onRestartTutorial={() => { setSettingsOpen(false); setShowOnboarding(true); }}
+            onboardingTab={settingsTabOverride}
           />
         </div>
       ) : (
@@ -783,6 +789,9 @@ function App() {
         <OnboardingTutorial
           onComplete={handleCompleteOnboarding}
           onSkip={handleSkipOnboarding}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onCloseSettings={() => setSettingsOpen(false)}
+          onSetSettingsTab={setSettingsTabOverride}
         />
       )}
     </div>

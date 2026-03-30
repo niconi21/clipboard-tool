@@ -83,6 +83,7 @@ interface Props {
   onPause: (minutes: number | null) => Promise<void>;
   onResume: () => Promise<void>;
   onRestartTutorial?: () => void;
+  onboardingTab?: string;
 }
 
 type Tab = "appearance" | "content-types" | "categories" | "collections" | "behavior" | "about";
@@ -134,9 +135,15 @@ export function SettingsPanel({
   onPause,
   onResume,
   onRestartTutorial,
+  onboardingTab,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("appearance");
+
+  // Controlled tab override from onboarding tutorial
+  useEffect(() => {
+    if (onboardingTab) setActiveTab(onboardingTab as Tab);
+  }, [onboardingTab]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Theme editor state
@@ -337,7 +344,7 @@ export function SettingsPanel({
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-0.5 px-3 pt-2 pb-0 shrink-0 border-b border-stroke overflow-x-auto">
+      <div data-tour="settings-tabs" className="flex items-center gap-0.5 px-3 pt-2 pb-0 shrink-0 border-b border-stroke overflow-x-auto">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -358,7 +365,7 @@ export function SettingsPanel({
 
         {/* ── Appearance ─────────────────────────────────────────── */}
         {activeTab === "appearance" && (
-          <>
+          <div data-tour="settings-appearance">
             <Section title={t("settings.appearance.theme_title")} description={t("settings.appearance.theme_desc")}>
               {themeEditor ? (
                 <div className="p-4 rounded-lg bg-surface border border-stroke space-y-4">
@@ -598,7 +605,7 @@ export function SettingsPanel({
                 </div>
               </Section>
             )}
-          </>
+          </div>
         )}
 
         {/* ── Content Types ──────────────────────────────────────── */}
@@ -666,6 +673,7 @@ export function SettingsPanel({
 
         {/* ── Behavior ───────────────────────────────────────────── */}
         {activeTab === "behavior" && (
+          <div data-tour="settings-behavior">
           <Section title={t("settings.behavior.section_title")} description={t("settings.behavior.section_desc")}>
             <div className="p-4 rounded-lg bg-surface border border-stroke space-y-4">
               <SettingRow
@@ -886,6 +894,7 @@ export function SettingsPanel({
               {importTotal !== null && <p className="text-xs text-accent">{t("about.import_result", { total: importTotal })}</p>}
             </div>
           </Section>
+          </div>
         )}
 
         {/* ── About ──────────────────────────────────────────────────── */}

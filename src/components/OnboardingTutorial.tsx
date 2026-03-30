@@ -2,17 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface Step {
-  target: string | null; // data-tour attribute value, null = welcome (centered modal)
+  target: string | null;
   titleKey: string;
   descKey: string;
+  openSettings?: boolean;   // whether settings must be open for this step
+  settingsTab?: string;     // tab to activate when settings opens for this step
 }
 
 const STEPS: Step[] = [
-  { target: null,           titleKey: "onboarding.s0_title", descKey: "onboarding.s0_desc" },
-  { target: "entry-list",   titleKey: "onboarding.s1_title", descKey: "onboarding.s1_desc" },
-  { target: "search-bar",   titleKey: "onboarding.s2_title", descKey: "onboarding.s2_desc" },
-  { target: "tabs",         titleKey: "onboarding.s3_title", descKey: "onboarding.s3_desc" },
-  { target: "settings-btn", titleKey: "onboarding.s4_title", descKey: "onboarding.s4_desc" },
+  { target: null,                    titleKey: "onboarding.s0_title", descKey: "onboarding.s0_desc" },
+  { target: "entry-list",            titleKey: "onboarding.s1_title", descKey: "onboarding.s1_desc" },
+  { target: "search-bar",            titleKey: "onboarding.s2_title", descKey: "onboarding.s2_desc" },
+  { target: "tabs",                  titleKey: "onboarding.s3_title", descKey: "onboarding.s3_desc" },
+  { target: "settings-btn",          titleKey: "onboarding.s4_title", descKey: "onboarding.s4_desc" },
+  { target: "settings-tabs",         titleKey: "onboarding.s5_title", descKey: "onboarding.s5_desc", openSettings: true, settingsTab: "appearance" },
+  { target: "settings-appearance",   titleKey: "onboarding.s6_title", descKey: "onboarding.s6_desc", openSettings: true, settingsTab: "appearance" },
+  { target: "settings-behavior",     titleKey: "onboarding.s7_title", descKey: "onboarding.s7_desc", openSettings: true, settingsTab: "behavior" },
 ];
 
 const PAD = 8;
@@ -22,9 +27,12 @@ interface Rect { top: number; left: number; width: number; height: number; }
 interface Props {
   onComplete: () => void;
   onSkip: () => void;
+  onOpenSettings?: () => void;
+  onCloseSettings?: () => void;
+  onSetSettingsTab?: (tab: string) => void;
 }
 
-export function OnboardingTutorial({ onComplete, onSkip }: Props) {
+export function OnboardingTutorial({ onComplete, onSkip, onOpenSettings, onCloseSettings, onSetSettingsTab }: Props) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
@@ -33,6 +41,16 @@ export function OnboardingTutorial({ onComplete, onSkip }: Props) {
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
   const isWelcome = current.target === null;
+
+  // Open/close settings and switch tab when step requires it
+  useEffect(() => {
+    if (current.openSettings) {
+      onOpenSettings?.();
+      if (current.settingsTab) onSetSettingsTab?.(current.settingsTab);
+    } else {
+      onCloseSettings?.();
+    }
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Find target element and track its rect
   useEffect(() => {
