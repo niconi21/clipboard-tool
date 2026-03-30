@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-03-29
+
 ### Added
 - feat(#63): interactive onboarding tutorial — spotlight-style step-by-step walkthrough triggered on first launch; re-accessible from Settings > About; skip option; i18n support
 - feat(#60): live theme editor — color picker changes apply instantly via CSS variables; edit mode auto-saves to DB with 800ms debounce; cancel reverts to active theme; Reset button restores pre-edit colors
