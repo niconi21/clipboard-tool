@@ -610,6 +610,7 @@ export function SettingsPanel({
 
         {/* ── Content Types ──────────────────────────────────────── */}
         {activeTab === "content-types" && (
+          <div data-tour="settings-content-types">
           <Section
             title={t("settings.content_types.section_title")}
             description={t("settings.content_types.section_desc")}
@@ -625,10 +626,12 @@ export function SettingsPanel({
               onToggleRule={onToggleContentTypeRule}
             />
           </Section>
+          </div>
         )}
 
         {/* ── Categories ─────────────────────────────────────────── */}
         {activeTab === "categories" && (
+          <div data-tour="settings-categories">
           <Section
             title={t("settings.categories.section_title")}
             description={t("settings.categories.section_desc")}
@@ -644,10 +647,12 @@ export function SettingsPanel({
               onToggleRule={onToggleContextRule}
             />
           </Section>
+          </div>
         )}
 
         {/* ── Collections ────────────────────────────────────────── */}
         {activeTab === "collections" && (
+          <div data-tour="settings-collections">
           <Section
             title={t("settings.collections_section.section_title")}
             description={t("settings.collections_section.section_desc")}
@@ -669,6 +674,7 @@ export function SettingsPanel({
               onDeleteSubcollection={onDeleteSubcollection}
             />
           </Section>
+          </div>
         )}
 
         {/* ── Behavior ───────────────────────────────────────────── */}
@@ -898,7 +904,11 @@ export function SettingsPanel({
         )}
 
         {/* ── About ──────────────────────────────────────────────────── */}
-        {activeTab === "about" && <AboutTab onRestartTutorial={onRestartTutorial} />}
+        {activeTab === "about" && (
+          <div data-tour="settings-about">
+            <AboutTab onRestartTutorial={onRestartTutorial} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -15,9 +15,13 @@ const STEPS: Step[] = [
   { target: "search-bar",            titleKey: "onboarding.s2_title", descKey: "onboarding.s2_desc" },
   { target: "tabs",                  titleKey: "onboarding.s3_title", descKey: "onboarding.s3_desc" },
   { target: "settings-btn",          titleKey: "onboarding.s4_title", descKey: "onboarding.s4_desc" },
-  { target: "settings-tabs",         titleKey: "onboarding.s5_title", descKey: "onboarding.s5_desc", openSettings: true, settingsTab: "appearance" },
-  { target: "settings-appearance",   titleKey: "onboarding.s6_title", descKey: "onboarding.s6_desc", openSettings: true, settingsTab: "appearance" },
-  { target: "settings-behavior",     titleKey: "onboarding.s7_title", descKey: "onboarding.s7_desc", openSettings: true, settingsTab: "behavior" },
+  { target: "settings-tabs",          titleKey: "onboarding.s5_title", descKey: "onboarding.s5_desc", openSettings: true, settingsTab: "appearance" },
+  { target: "settings-appearance",    titleKey: "onboarding.s6_title", descKey: "onboarding.s6_desc", openSettings: true, settingsTab: "appearance" },
+  { target: "settings-content-types", titleKey: "onboarding.s7_title", descKey: "onboarding.s7_desc", openSettings: true, settingsTab: "content-types" },
+  { target: "settings-categories",    titleKey: "onboarding.s8_title", descKey: "onboarding.s8_desc", openSettings: true, settingsTab: "categories" },
+  { target: "settings-collections",   titleKey: "onboarding.s9_title", descKey: "onboarding.s9_desc", openSettings: true, settingsTab: "collections" },
+  { target: "settings-behavior",      titleKey: "onboarding.s10_title", descKey: "onboarding.s10_desc", openSettings: true, settingsTab: "behavior" },
+  { target: "settings-about",         titleKey: "onboarding.s11_title", descKey: "onboarding.s11_desc", openSettings: true, settingsTab: "about" },
 ];
 
 const PAD = 8;
@@ -113,7 +117,7 @@ export function OnboardingTutorial({ onComplete, onSkip, onOpenSettings, onClose
         <div className="bg-surface border border-stroke rounded-xl shadow-xl p-6 w-72 space-y-4">
           <div className="text-center space-y-1">
             <div className="text-2xl mb-2">📋</div>
-            <p className="text-base font-semibold text-content">{t(current.titleKey)}</p>
+            <p className="text-sm font-semibold text-content">{t(current.titleKey)}</p>
             <p className="text-xs text-content-2 leading-relaxed">{t(current.descKey)}</p>
           </div>
           <div className="flex gap-2">
@@ -163,7 +167,7 @@ export function OnboardingTutorial({ onComplete, onSkip, onOpenSettings, onClose
       )}
 
       {/* Tooltip */}
-      <div ref={tooltipRef} style={tooltipStyle()} className="z-[52]">
+      <div ref={tooltipRef} style={tooltipStyle()} className="z-52">
         <div className="bg-surface border border-stroke rounded-xl shadow-xl p-4 space-y-3">
           <div>
             <div className="flex items-center justify-between mb-1">
